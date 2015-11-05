@@ -1,4 +1,5 @@
-BIT_NAME = {}
+mnemonic = 'armv7m'
+name = 'ARMv7-M'
 
 BLK_NAME = \
 {
@@ -13,25 +14,16 @@ REG_NAME = \
   , 'ITM_TCR' : "Trace Control Register"
 }
 
-REG_MAP = \
-{
-    'DEMCR'   : 0xE000EDFC
-  , 'DHCSR'   : 0xE000EDF0
-  , 'DCRSR'   : 0xE000EDF4
-  , 'DCRDR'   : 0xE000EDF8
-  , 'AIRCR'   : 0xE000ED0C
-  , 'ITM_TCR' : 0xE0000E80
-}
-
-REG_DESCR = \
-{
-}
 BLK_DESCR = {}
+
+REG_DESCR = {}
+
+BIT_DESCR = {}
 
 BLK_MAP = \
 {
-'SCS': ('AIRCR', 'DHCSR', 'DCRSR', 'DCRDR', 'DEMCR')
-,'ITM': ('ITM_TCR',)
+    'SCS': ('AIRCR', 'DHCSR', 'DCRSR', 'DCRDR', 'DEMCR')
+  , 'ITM': ('ITM_TCR',)
 }
 
 MEM_MAP = \
@@ -44,6 +36,16 @@ MEM_MAP = \
   , 'DWT'       : (0xE0001000, 0xE0002000)
   , 'FPB'       : (0xE0002000, 0xE0003000)
   , 'SCS'       : (0xE000E000, 0xE000F000)
+}
+
+REG_MAP = \
+{
+    'DEMCR'   : 0xE000EDFC
+  , 'DHCSR'   : 0xE000EDF0
+  , 'DCRSR'   : 0xE000EDF4
+  , 'DCRDR'   : 0xE000EDF8
+  , 'AIRCR'   : 0xE000ED0C
+  , 'ITM_TCR' : 0xE0000E80
 }
 
 BIT_MAP = \
