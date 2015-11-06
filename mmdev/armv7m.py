@@ -1,18 +1,18 @@
 mnemonic = 'armv7m'
 name = 'ARMv7-M'
 
-BLK_NAME = \
-{
+BLK_NAME = {
     'ITM': "Instrumentation Trace Macrocell"
   , 'SCS': "System Control Space"
 }
 
-REG_NAME = \
-{
+REG_NAME = {
     'DEMCR'   : "Debug Exception and Monitor Control Register"
   , 'DHCSR'   : "Debug Halt Control and Status Register"    
   , 'ITM_TCR' : "Trace Control Register"
 }
+
+BIT_NAME = {}
 
 BLK_DESCR = {}
 
@@ -20,14 +20,12 @@ REG_DESCR = {}
 
 BIT_DESCR = {}
 
-BLK_MAP = \
-{
+BLK_MAP = {
     'SCS': ('AIRCR', 'DHCSR', 'DCRSR', 'DCRDR', 'DEMCR')
   , 'ITM': ('ITM_TCR',)
 }
 
-MEM_MAP = \
-{
+MEM_MAP = {
     'TPIU'      : 0xE0040000
   , 'ETM'       : 0xE0041000
   , 'EPPB'      : 0xE0042000
@@ -38,8 +36,7 @@ MEM_MAP = \
   , 'SCS'       : 0xE000E000
 }
 
-REG_MAP = \
-{
+REG_MAP = {
     'DEMCR'   : 0xE000EDFC
   , 'DHCSR'   : 0xE000EDF0
   , 'DCRSR'   : 0xE000EDF4
@@ -49,8 +46,7 @@ REG_MAP = \
   , 'TPIU_TYPE': 0xE0040FC8
 }
 
-BIT_MAP = \
-{
+BIT_MAP = {
     'DEMCR' : {
         'TRCENA'       : 0x01000000
       , 'MON_REQ'      : 0x00080000
