@@ -1,21 +1,24 @@
-getattrd = lambda obj, x1, x2: getattr(getattr(obj, x1), x2)
-
-
 class DUT:
     def __init__(self, dutdef):
+        if isinstance(dutdef, basestring):
+            dutdef = __import__('mmdev.'+dutdef, fromlist=[''])
         self.mnemonic = getattr(dutdef, 'mnemonic', 'DUT')
         self.name = getattr(dutdef, 'name', dutdef.__name__)
 
         self._mmap = dutdef.MEM_MAP.keys()
         for k in self._mmap:
             setattr(self, k.lower(), Block(dutdef, k))
-        self._mmap = sorted(self._mmap, key=lambda k: getattrd(self, k.lower(), 'addr'), reverse=True)
+        self._mmap = sorted(self._mmap, key=lambda k: getattr(self, k.lower()).addr, reverse=True)
 
         self._linefmt = "0x{:08X} {:s}".format
 
+    def get_blocks(self):
+        return [(k, getattr(self, k.lower()).addr) for k in self._mmap]
+
     def __repr__(self):
         dstr = "{:s}\n".format(self.name)
-        dstr+= "Blocks:\n\t" + "\n\t".join([self._linefmt(getattrd(self, k.lower(), 'addr'), k) for k in self._mmap])
+        dstr+= "Blocks:\n\t"
+        dstr+= "\n\t".join([self._linefmt(getattr(self, k.lower()).addr, k) for k in self._mmap])
         return dstr
 
     def __str__(self):
@@ -33,13 +36,17 @@ class Block:
         self._rmap = dutdef.BLK_MAP.get(self.mnemonic, ())
         for k in self._rmap:
             setattr(self, k.lower(), Register(dutdef, k))
-        self._rmap = sorted(self._rmap, key=lambda k: getattrd(self, k.lower(), 'addr'), reverse=True)
+        self._rmap = sorted(self._rmap, key=lambda k: getattr(self, k.lower()).addr, reverse=True)
 
         self._linefmt = "0x{:08X} {:s}".format
 
+    def get_regs(self):
+        return [(k, getattr(self, k.lower()).addr) for k in self._rmap]
+        
     def __repr__(self):
         dstr = "{:s} ({:s}, 0x{:08X})\n".format(self.name, self.mnemonic, self.addr)
-        dstr+= "Registers:\n\t" + "\n\t".join([self._linefmt(getattrd(self, k.lower(), 'addr'), k) for k in self._rmap])
+        dstr+= "Registers:\n\t"
+        dstr+= "\n\t".join([self._linefmt(getattr(self, k.lower()).addr, k) for k in self._rmap])
         return dstr
 
     def __str__(self):
@@ -57,13 +64,17 @@ class Register:
         self._bmap = dutdef.BIT_MAP.get(self.mnemonic, ())
         for k in self._bmap:
             setattr(self, k.lower(), BitField(dutdef, self.mnemonic, k))
-        self._bmap = sorted(self._bmap, key=lambda k: getattrd(self, k.lower(), 'mask'), reverse=True)
+        self._bmap = sorted(self._bmap, key=lambda k: getattr(self, k.lower()).mask, reverse=True)
 
         self._linefmt = "0x{:08X} {:s}".format
 
+    def get_bits(self):
+        return [(k, getattr(self, k.lower()).mask) for k in self._bmap]
+
     def __repr__(self):
         dstr = "{:s} ({:s}, 0x{:08X})\n".format(self.name, self.mnemonic, self.addr)
-        dstr+= "BitFields:\n\t" + "\n\t".join([self._linefmt(getattrd(self, k.lower(), 'mask'), k) for k in self._bmap])
+        dstr+= "BitFields:\n\t"
+        dstr+= "\n\t".join([self._linefmt(getattr(self, k.lower()).mask, k) for k in self._bmap])
         return dstr
 
     def __str__(self):

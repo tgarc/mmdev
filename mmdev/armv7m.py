@@ -46,6 +46,7 @@ REG_MAP = \
   , 'DCRDR'   : 0xE000EDF8
   , 'AIRCR'   : 0xE000ED0C
   , 'ITM_TCR' : 0xE0000E80
+  , 'TPIU_TYPE': 0xE0040FC8
 }
 
 BIT_MAP = \
