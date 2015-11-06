@@ -7,13 +7,13 @@ def gdb_regdefs(dut, out=sys.stdout):
 
     linefmt = "set $%s=0x%08x"
     for blkname, blk in dut.iteritems():
-        print >> out, '#', blkname
-        print >> out, '#', '='*30
+        print >> out, '#', blkname, blk.name
+        print >> out, '#', '='*58
         print >> out, linefmt % (blkname.lower(), blk.addr)
         print >> out
         for regname, reg in blk.iteritems():
-            print >> out, '#', regname.lower()
-            print >> out, '#', '-'*len(regname)
+            print >> out, '#', regname.lower(), reg.name.lower()
+            print >> out, '#', '-'*(len(regname)+len(reg.name)+1)
             print >> out, linefmt % (regname.lower(),reg.addr)
             for bfname, bits in reg.iteritems():
                 print >> out, linefmt % (bfname.lower(), bits.mask)
