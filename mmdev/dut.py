@@ -1,12 +1,16 @@
+import ctypes as _ctypes
+
 class Block(object):
     fmt="{name:s} ({mnemonic:s})"
 
-    def __init__(self, name, fullname='', descr='', fmt=None):
+    def __init__(self, name, addr, fullname='', descr='', fmt=None):
         self.mnemonic = name
+        self.addr = addr
         self.name = fullname
         self.descr = descr
         self.fmt = self.__class__.fmt if fmt is None else fmt
-        self.fields = ['mnemonic','name','descr']
+        self.type = self.__class__.__name__
+        self.fields = ['mnemonic', 'name', 'descr', 'addr', 'type']
 
     @property
     def fields(self):
@@ -21,74 +25,74 @@ class Block(object):
         del self._fields
 
     def __repr__(self):
-        return self.fmt.format(**self._fields)
-
-    def __str__(self):
-        return "{:s}('{:s}')".format(self.__class__.__name__, self.mnemonic)
+        return "<{:s} \"{:s}\" at 0x{:08X}>".format(self.type, self.mnemonic, self.addr)
 
 
 class DeviceBlock(Block):
-    fmt="0x{addr:08X} {mnemonic:s}"
+    fmt="{name:s} ({mnemonic:s}, 0x{addr:08X})"
+    _subclass = Register
 
     def __init__(self, name, addr, blocks=[], fullname='', descr='', fmt=None):
-        super(DeviceBlock, self).__init__(name, fullname=fullname, descr=descr, fmt=fmt)
+        super(DeviceBlock, self).__init__(name, addr, fullname=fullname, descr=descr, fmt=fmt)
 
-        self.addr = addr
-        self.fields += ['addr']
-        self.blocks = tuple(blocks)
-
-        for blk in self.blocks:
+        for blk in blocks:
             setattr(self, blk.mnemonic.lower(), blk)
 
         # sort by address
-        self.blocks = sorted(self.blocks, key=lambda blk: blk.addr, reverse=True)
-        self.blocks = tuple(self.blocks)
+        self._blocks = sorted(blocks, key=lambda blk: blk.addr, reverse=True)
+        self._blocks = tuple(self._blocks)
 
+        self._subclass = getattr(self.__class__, '_subclass', DeviceBlock)
+        
     def iterkeys(self):
-        return iter(self.blocks)
+        return iter(blk.mnemonic for blk in self._blocks)
 
     def keys(self):
-        return list(self.blocks)
+        return list(self.iterkeys())
 
     def iteritems(self):
-        return iter((blk.mnemonic, blk) for blk in self.blocks)
+        return iter((blk.mnemonic, blk) for blk in self._blocks)
 
     def items(self):
         return list(self.iteritems())
 
+    def values(self):
+        return list(self._blocks)
+
+    def itervalues(self):
+        return iter(self._blocks)
+
+    @property
+    def tree(self):
+        dstr = self.fmt.format(**self._fields) + '\n'
+        dstr+= "\n".join(map(repr,self._blocks))
+        print dstr
+
     def __repr__(self):
         dstr = self.fmt.format(**self._fields) + '\n'
-        dstr+= "Registers:\n\t"
-        dstr+= "\n\t".join([reg.fmt.format(**reg._fields) for reg in self.blocks])
+        dstr+= "%ss:\n\t" % self._subclass.__name__
+        dstr+= "\n\t".join(["0x{addr:08X} {mnemonic:s}".format(**blk._fields) for blk in self._blocks])
         return dstr
-
-    def __str__(self):
-        return "{:s}('{:s}', 0x{:08X})".format(self.__class__.__name__, self.mnemonic, self.addr)
 
 
 class Register(DeviceBlock):
+    _subclass = BitField
     def __init__(self, regname, addr, bitfields, fullname='', descr='', fmt=None):
         super(Register, self).__init__(regname, addr, bitfields, fullname=fullname, descr=descr, fmt=fmt)
 
-    def __repr__(self):
-        dstr = self.fmt.format(**self._fields) + '\n'
-        dstr+= "BitFields:\n\t"
-        dstr+= "\n\t".join([bf.fmt.format(**bf._fields) for bf in self.blocks])
-        return dstr
-
+_bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
+                   31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
 class BitField(Block):
-    fmt="0x{mask:08X} {mnemonic:s}"
-
     def __init__(self, bfname, mask, fullname='', descr='', fmt=None):
-        super(BitField, self).__init__(bfname, fullname=fullname, descr=descr, fmt=fmt)
+        # cmask = _ctypes.c_uint32(mask).value
+        # offset = _bruijn32lookup[_ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
+        super(BitField, self).__init__(bfname, mask, fullname=fullname, descr=descr, fmt=fmt)
         self.mask = mask
-        self.addr = mask
-        self.fields += ['mask',]
+        self.fields += ['mask']
 
-    def __str__(self):
-        return "{:s}('{:s}', 0x{:08X})".format(self.__class__.__name__, self.mnemonic, self.mask)
 
 class DUT(DeviceBlock):
+    _subclass = DeviceBlock
     """
     Create a DUT device from device definition file.
 
@@ -116,9 +120,9 @@ class DUT(DeviceBlock):
     --------
     Full name of DUT. Defaults to "DUT".
 
-    BLK_NAME, REG_NAME
+    BLK_NAME, REG_NAME, BIT_NAME
     ------------------
-    Maps a block/register mnemonic to its full name (e.g., ITM :
+    Maps a block/register/bitfield mnemonic to its full name (e.g., ITM :
     Instrumentation Trace Macrocell).
 
     BLK_DESCR, REG_DESCR, BIT_DESCR
@@ -136,32 +140,23 @@ class DUT(DeviceBlock):
             for regname in devfile.BLK_MAP.get(blkname,()):
                 regaddr = devfile.REG_MAP[regname]
                 bitfields = [BitField(bitname, bitmask,
-                                      fullname=devfile.BIT_NAME.get(bitname,'bitfield'),
+                                      fullname=devfile.BIT_NAME.get(bitname,'BitField'),
                                       descr=devfile.BIT_DESCR.get(bitname,''),
                                       fmt=bitfmt)
                              for bitname, bitmask in devfile.BIT_MAP[regname].iteritems()]
 
                 registers.append(Register(regname, regaddr, bitfields,
-                                          fullname=devfile.REG_NAME.get(regname,'register'),
+                                          fullname=devfile.REG_NAME.get(regname,'Register'),
                                           descr=devfile.REG_DESCR.get(regname,''),
                                           fmt=regfmt))
 
             subblocks.append(DeviceBlock(blkname, blkaddr, registers,
-                                         devfile.BLK_NAME.get(blkname,'block'),
+                                         devfile.BLK_NAME.get(blkname,'Block'),
                                          devfile.BLK_DESCR.get(blkname,''),
                                          fmt=blkfmt))
 
-        name = getattr(devfile, 'name', devfile.__name__)
-        mnem = getattr(devfile, 'mnemonic', 'DUT')
+        name = getattr(devfile, 'name', 'DUT')
+        mnem = getattr(devfile, 'mnemonic', devfile.__name__)
         descr = getattr(devfile, 'descr', '')
 
         super(DUT, self).__init__(mnem, 0, subblocks, fullname=name, descr=descr, fmt=devfmt)
-
-    def __repr__(self):
-        dstr = self.fmt.format(**self._fields) + '\n'
-        dstr+= "Blocks:\n\t"
-        dstr+= "\n\t".join([blk.fmt.format(**blk._fields) for blk in self.blocks])
-        return dstr
-
-    def __str__(self):
-        return "{:s}('{:s}', 0x{:08X})".format(self.__class__.__name__, self.mnemonic, self.addr)
