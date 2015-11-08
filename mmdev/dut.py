@@ -1,16 +1,59 @@
 import ctypes as _ctypes
 
+
 class Block(object):
     fmt="{name:s} ({mnemonic:s})"
 
-    def __init__(self, name, addr, fullname='', descr='', fmt=None):
-        self.mnemonic = name
+    def __init__(self, mnemonic, addr, parent=None, fullname='', descr='', fmt=None):
+        self.mnemonic = mnemonic
         self.addr = addr
         self.name = fullname
         self.descr = descr
         self.fmt = self.__class__.fmt if fmt is None else fmt
+        self._blocks = []
+        self._map = {}
+
         self.type = self.__class__.__name__
-        self.fields = ['mnemonic', 'name', 'descr', 'addr', 'type']
+        self.parent = parent
+        self.root = self
+
+        if parent is not None:
+            p = parent
+            while p.parent is not None:
+                p = p.parent
+            self.root = p
+
+        self.fields = ['mnemonic', 'name', 'descr', 'addr', 'type', 'parent']
+
+    def __getitem__(self, key):
+        try:
+            return self.root._map[key.lower()]
+        except KeyError:
+            raise KeyError(key)
+
+    def _create_subblock(self, mnemonic, addr, blocktype, fullname='', descr='', fmt=None):
+        subblock = blocktype(mnemonic, addr, parent=self, fullname=fullname, descr=descr, fmt=fmt)
+        setattr(self, mnemonic.lower(), subblock)
+
+        self.root._map[mnemonic.lower()] = subblock
+
+        # sort by address
+        self._blocks.append(subblock)
+        self._blocks = sorted(self._blocks, key=lambda blk: blk.addr, reverse=True)
+
+        return subblock
+
+    def create_subblock(self, mnemonic, addr, fullname='', descr='', fmt=None):
+        return self._create_subblock(mnemonic, addr, SubBlock, fullname=fullname, descr=descr, fmt=fmt)
+
+    @property
+    def parents(self):
+        parents = []
+        p = self.parent
+        while p is not None:
+            parents.append(p)
+            p = p.parent
+        return parents
 
     @property
     def fields(self):
@@ -24,26 +67,6 @@ class Block(object):
     def fields(self):
         del self._fields
 
-    def __repr__(self):
-        return "<{:s} \"{:s}\" at 0x{:08X}>".format(self.type, self.mnemonic, self.addr)
-
-
-class DeviceBlock(Block):
-    fmt="{name:s} ({mnemonic:s}, 0x{addr:08X})"
-    _subclass = Register
-
-    def __init__(self, name, addr, blocks=[], fullname='', descr='', fmt=None):
-        super(DeviceBlock, self).__init__(name, addr, fullname=fullname, descr=descr, fmt=fmt)
-
-        for blk in blocks:
-            setattr(self, blk.mnemonic.lower(), blk)
-
-        # sort by address
-        self._blocks = sorted(blocks, key=lambda blk: blk.addr, reverse=True)
-        self._blocks = tuple(self._blocks)
-
-        self._subclass = getattr(self.__class__, '_subclass', DeviceBlock)
-        
     def iterkeys(self):
         return iter(blk.mnemonic for blk in self._blocks)
 
@@ -69,30 +92,42 @@ class DeviceBlock(Block):
         print dstr
 
     def __repr__(self):
-        dstr = self.fmt.format(**self._fields) + '\n'
-        dstr+= "%ss:\n\t" % self._subclass.__name__
+        dstr = self.fmt.format(**self._fields) + '\n\t'
+        # dstr+= "%ss:\n\t" % self._subclass.__name__
         dstr+= "\n\t".join(["0x{addr:08X} {mnemonic:s}".format(**blk._fields) for blk in self._blocks])
         return dstr
 
+    # def __repr__(self):
+    #     return "<{:s} '{:s}'>".format(self.type, self.mnemonic)
 
-class Register(DeviceBlock):
-    _subclass = BitField
-    def __init__(self, regname, addr, bitfields, fullname='', descr='', fmt=None):
-        super(Register, self).__init__(regname, addr, bitfields, fullname=fullname, descr=descr, fmt=fmt)
+
+class SubBlock(Block):
+    fmt=' '.join(["{name:s}","({mnemonic:s}, 0x{addr:08X})"])
+    def create_register(self, mnemonic, addr, fullname='', descr='', fmt=None):
+        return self._create_subblock(mnemonic, addr, Register, fullname=fullname, descr=descr, fmt=fmt)
+
+    # def __repr__(self):
+    #     return "<{:s} '{:s}' at 0x{:08X} in '{:s}'>".format(self.type, self.mnemonic, self.addr, '.'.join([p.mnemonic for p in self.parents[::-1]]))
+
+
+class Register(SubBlock):
+    def create_bitfield(self, mnemonic, addr, fullname='', descr='', fmt=None):
+        return self._create_subblock(mnemonic, addr, BitField, fullname=fullname, descr=descr, fmt=fmt)
+
 
 _bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
                    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
-class BitField(Block):
-    def __init__(self, bfname, mask, fullname='', descr='', fmt=None):
-        # cmask = _ctypes.c_uint32(mask).value
-        # offset = _bruijn32lookup[_ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
-        super(BitField, self).__init__(bfname, mask, fullname=fullname, descr=descr, fmt=fmt)
+
+class BitField(SubBlock):
+    def __init__(self, mnemonic, mask, parent=None, fullname='', descr='', fmt=None):
+        cmask = _ctypes.c_uint32(mask).value
+        offset = _bruijn32lookup[_ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
+        super(BitField, self).__init__(mnemonic, offset, parent=parent, fullname=fullname, descr=descr, fmt=fmt)
         self.mask = mask
         self.fields += ['mask']
 
 
-class DUT(DeviceBlock):
-    _subclass = DeviceBlock
+def DUT(devfile, devfmt=None, blkfmt=None, regfmt=None, bitfmt=None):
     """
     Create a DUT device from device definition file.
 
@@ -110,7 +145,7 @@ class DUT(DeviceBlock):
 
 
     Definition files also have some optional fields:
-    
+
     mnemonic
     --------
     Shorthand name for DUT (e.g. armv7m). Defaults to definition file
@@ -129,34 +164,31 @@ class DUT(DeviceBlock):
     -------------------------------
     Maps a block/register/bitfield mnemonic to a description.
     """
-    
-    def __init__(self, devfile, devfmt=Block.fmt, blkfmt=None, regfmt=None, bitfmt=None):
-        if isinstance(devfile, basestring):
-            devfile = __import__('mmdev.'+devfile, fromlist=[''])
 
-        subblocks = []
-        for blkname, blkaddr in devfile.MEM_MAP.iteritems():
-            registers = []
-            for regname in devfile.BLK_MAP.get(blkname,()):
-                regaddr = devfile.REG_MAP[regname]
-                bitfields = [BitField(bitname, bitmask,
-                                      fullname=devfile.BIT_NAME.get(bitname,'BitField'),
-                                      descr=devfile.BIT_DESCR.get(bitname,''),
-                                      fmt=bitfmt)
-                             for bitname, bitmask in devfile.BIT_MAP[regname].iteritems()]
+    if isinstance(devfile, basestring):
+        devfile = __import__('mmdev.'+devfile, fromlist=[''])
 
-                registers.append(Register(regname, regaddr, bitfields,
-                                          fullname=devfile.REG_NAME.get(regname,'Register'),
-                                          descr=devfile.REG_DESCR.get(regname,''),
-                                          fmt=regfmt))
+    name = getattr(devfile, 'name', 'DUT')
+    mnem = getattr(devfile, 'mnemonic', devfile.__name__)
+    descr = getattr(devfile, 'descr', '')
 
-            subblocks.append(DeviceBlock(blkname, blkaddr, registers,
-                                         devfile.BLK_NAME.get(blkname,'Block'),
-                                         devfile.BLK_DESCR.get(blkname,''),
-                                         fmt=blkfmt))
+    dut = Block(mnem, 0, fullname=name, descr=descr, fmt=devfmt)
+    for blkname, blkaddr in devfile.MEM_MAP.iteritems():
+        blk  = dut.create_subblock(blkname, blkaddr,
+                                   fullname=devfile.BLK_NAME.get(blkname,'Block'),
+                                   descr=devfile.BLK_DESCR.get(blkname,''),
+                                   fmt=blkfmt)
+        for regname in devfile.BLK_MAP.get(blkname,()):
+            regaddr = devfile.REG_MAP[regname]
+            reg = blk.create_register(regname, regaddr,
+                                      fullname=devfile.REG_NAME.get(regname,'Register'),
+                                      descr=devfile.REG_DESCR.get(regname,''),
+                                      fmt=regfmt)
+            for bitname, bitmask in devfile.BIT_MAP[regname].iteritems():
+                bits = reg.create_bitfield(bitname, bitmask,
+                                           fullname=devfile.BIT_NAME.get(bitname,'BitField'),
+                                           descr=devfile.BIT_DESCR.get(bitname,''),
+                                           fmt=bitfmt)
 
-        name = getattr(devfile, 'name', 'DUT')
-        mnem = getattr(devfile, 'mnemonic', devfile.__name__)
-        descr = getattr(devfile, 'descr', '')
+    return dut
 
-        super(DUT, self).__init__(mnem, 0, subblocks, fullname=name, descr=descr, fmt=devfmt)
