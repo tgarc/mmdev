@@ -1,5 +1,5 @@
-mnemonic = 'armv7m'
-name = 'ARMv7-M'
+mnemonic = 'cm3'
+name = 'ARM Cortex-M3'
 
 BLK_NAME = {
     'ITM': "Instrumentation Trace Macrocell"
@@ -46,6 +46,7 @@ REG_MAP = {
       , 'DCRSR'   : 0xE000EDF4
       , 'DCRDR'   : 0xE000EDF8
       , 'DEMCR'   : 0xE000EDFC
+      , 'DFSR'    : 0xE000ED30
     }
   , 'ITM': {
         'ITM_TCR' : 0xE0000E80
@@ -135,7 +136,7 @@ BIT_MAP = {
       , 'TraceBusID' : 0x007F0000
       , 'TSPrescale' : 0x00000300
       , 'SWOENA'     : 0x00000010
-      , 'TXENA'      : 0x00000008
+      , 'DWTENA'     : 0x00000008
       , 'SYNCENA'    : 0x00000004
       , 'TSENA'      : 0x00000002
       , 'ITMENA'     : 0x00000001
@@ -171,5 +172,4 @@ BIT_MAP = {
         'STIMULUS': 0xFFFFFFFF
       , 'FIFOREADY': 0x1
     }
-
 }
