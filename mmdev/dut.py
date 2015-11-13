@@ -35,10 +35,10 @@ class Block(object):
         subblock = blocktype(mnemonic, addr, parent=self, fullname=fullname, descr=descr, fmt=fmt)
         setattr(self, mnemonic.lower(), subblock)
 
+        self._blocks.append(subblock)
         self.root._map[mnemonic.lower()] = subblock
 
         # sort by address
-        self._blocks.append(subblock)
         self._blocks = sorted(self._blocks, key=lambda blk: blk.addr, reverse=True)
 
         return subblock
@@ -93,7 +93,6 @@ class Block(object):
 
     def __repr__(self):
         dstr = self.fmt.format(**self._fields) + '\n\t'
-        # dstr+= "%ss:\n\t" % self._subclass.__name__
         dstr+= "\n\t".join(["0x{addr:08X} {mnemonic:s}".format(**blk._fields) for blk in self._blocks])
         return dstr
 
@@ -119,17 +118,22 @@ _bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
                    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
 
 class BitField(SubBlock):
+    fmt=' '.join(["{name:s}","({mnemonic:s}, 0x{mask:08X})"])
     def __init__(self, mnemonic, mask, parent=None, fullname='', descr='', fmt=None):
-        cmask = _ctypes.c_uint32(mask).value
+        # calculate the bit offset from the mask using a debruijn hash function
+        # use ctypes to truncate the result to a uint32
+        # TODO: change to a 64 bit version of the lookup
         offset = _bruijn32lookup[_ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
+
         super(BitField, self).__init__(mnemonic, offset, parent=parent, fullname=fullname, descr=descr, fmt=fmt)
+
         self.mask = mask
         self.fields += ['mask']
 
 
 def DUT(devfile, devfmt=None, blkfmt=None, regfmt=None, bitfmt=None):
     """
-    Create a DUT device from device definition file.
+    Create a DUT device from a device definition file.
 
 
     DUT definition files are required to have three dict-like objects:
@@ -166,28 +170,31 @@ def DUT(devfile, devfmt=None, blkfmt=None, regfmt=None, bitfmt=None):
     """
 
     if isinstance(devfile, basestring):
-        devfile = __import__('mmdev.'+devfile, fromlist=[''])
+        if devfile.endswith('.py'): # if this is a file path, import it first
+            import imp, os
+            devfile = imp.load_source(os.path.basename(devfile), devfile)
+        else:
+            devfile = __import__('mmdev.'+devfile, fromlist=[''])
 
     name = getattr(devfile, 'name', 'DUT')
     mnem = getattr(devfile, 'mnemonic', devfile.__name__)
     descr = getattr(devfile, 'descr', '')
 
     dut = Block(mnem, 0, fullname=name, descr=descr, fmt=devfmt)
-    for blkname, blkaddr in devfile.MEM_MAP.iteritems():
+    for blkname, blkaddr in devfile.BLK_MAP.iteritems():
         blk  = dut.create_subblock(blkname, blkaddr,
                                    fullname=devfile.BLK_NAME.get(blkname,'Block'),
                                    descr=devfile.BLK_DESCR.get(blkname,''),
                                    fmt=blkfmt)
-        for regname in devfile.BLK_MAP.get(blkname,()):
-            regaddr = devfile.REG_MAP[regname]
+        for regname, regaddr in devfile.REG_MAP.get(blkname,{}).iteritems():
             reg = blk.create_register(regname, regaddr,
                                       fullname=devfile.REG_NAME.get(regname,'Register'),
                                       descr=devfile.REG_DESCR.get(regname,''),
                                       fmt=regfmt)
-            for bitname, bitmask in devfile.BIT_MAP[regname].iteritems():
+            for bitname, bitmask in devfile.BIT_MAP.get(regname,{}).iteritems():
                 bits = reg.create_bitfield(bitname, bitmask,
                                            fullname=devfile.BIT_NAME.get(bitname,'BitField'),
-                                           descr=devfile.BIT_DESCR.get(bitname,''),
+                                           descr=devfile.BIT_DESCR.get(regname,{}).get(bitname,''),
                                            fmt=bitfmt)
 
     return dut

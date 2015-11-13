@@ -1,11 +1,12 @@
-from mmdev.dut import DUT
+#!/usr/bin/env python
+from mmdev.dut import Block, DUT
 import sys
 
 def gdb_regdefs(dut, out=sys.stdout):
-    if not isinstance(dut, DUT):
+    if not isinstance(dut, Block):
         dut = DUT(dut)
 
-    linefmt = "set $%s=0x%08x"
+    linefmt = "set $%s = (unsigned long *) 0x%08x"
     for blkname, blk in dut.iteritems():
         print >> out, '#', blkname, blk.name
         print >> out, '#', '='*58
@@ -18,3 +19,6 @@ def gdb_regdefs(dut, out=sys.stdout):
             for bfname, bits in reg.iteritems():
                 print >> out, linefmt % (bfname.lower(), bits.mask)
             print >> out
+
+if __name__ == "__main__":
+    gdb_regdefs(sys.argv[1], sys.argv[2] if len(sys.argv)>2 else sys.stdout)
