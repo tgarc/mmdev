@@ -35,7 +35,7 @@ BIT_DESCR = {
   , 'ITM_TCR' : {
         'TSPrescale': "Timestamp prescaler, used with the trace packet reference clock. The reference clock source is selected by SWOENA. Defined as a power of four. These bits are cleared on Power-up reset."
       , 'TXENA': "Enable hardware event packet emission to the TPIU from the DWT. This bit is cleared on Power-up reset."
-      , 'SWOENA': "Enables aysynchronous-specific usage model for timestamps (when TSENA==1).\n0: mode disabled\n1:Timestamp counter uses lineout (data related) clock from TPIU interface."
+      , 'SWOENA': "Enables aysynchronous-specific usage model for timestamps (when TSENA==1).\n0: mode disabled\n1: Timestamp counter uses lineout (data related) clock from TPIU interface."
      }
 }
 
