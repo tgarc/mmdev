@@ -61,11 +61,6 @@ class BlockNode(Block):
             subblock = blocktype(mnemonic, addr, parent=self, fullname=fullname, descr=descr)
         setattr(self, mnemonic.lower(), subblock)
 
-        if hasattr(subblock, 'mask'):
-            setattr(self, mnemonic.upper(), subblock.mask)
-        elif hasattr(subblock, 'addr'):
-            setattr(self, mnemonic.upper(), subblock.addr)
-
         self._blocks.append(subblock)
         self._map[mnemonic.lower()] = subblock
 
