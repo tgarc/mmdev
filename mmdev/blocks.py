@@ -19,7 +19,7 @@ class LeafBlockNode(object):
         self._fields = ['mnemonic', 'name', 'descr', '_type', 'parent']
 
         if descr:
-            self.__doc__ = "{}\n\n{}".format(fullname or mnemonic, descr)
+            self.__doc__ = descr
 
     @property
     def _fmtdict(self):
@@ -168,11 +168,11 @@ class RegisterValue(object):
 class Register(Peripheral):
     value = RegisterValue()
 
-    def _create_bitfield(self, mnemonic, addr, fullname='', descr=''):
+    def _create_bitfield(self, mnemonic, mask, fullname='', descr=''):
         """
         Create and attach a bitfield to this register
         """
-        bits = BitField(mnemonic, addr, fullname=fullname, descr=descr)
+        bits = BitField(mnemonic, mask, fullname=fullname, descr=descr)
         self._attach_subblock(bits)
         return bits
 

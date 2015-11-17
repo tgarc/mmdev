@@ -3,6 +3,12 @@ from collections import OrderedDict
 from itertools import imap
 import json
 
+def _readint(x):
+    try:
+        return int(x)
+    except ValueError:
+        return int(x, 16)
+
 
 class DUT(RootBlockNode):
     _fmt="{name:s} ({mnemonic:s}, {width:d}-bit, vendor={vendor:s})"
@@ -139,7 +145,7 @@ class DUT(RootBlockNode):
         dut = DUT(mnem, fullname=name, descr=descr, width=width, vendor=vendor)
         for blkname, blkaddr in devfile.BLK_MAP.iteritems():
             pph = dut._create_peripheral(blkname, blkaddr,
-                                         fullname=devfile.BLK_NAME.get(blkname,'Block'),
+                                         fullname=devfile.BLK_NAME.get(blkname,'Peripheral'),
                                          descr=devfile.BLK_DESCR.get(blkname,''))
             for regname, regaddr in devfile.REG_MAP.get(blkname,{}).iteritems():
                 reg = pph._create_register(regname, regaddr,
@@ -172,28 +178,49 @@ class DUT(RootBlockNode):
 
         dut = DUT(mnem, fullname=name, descr=descr, width=width, vendor=vendor)
         for blkname, blkd in devfile['blocks'].iteritems():
-            try:
-                blkaddr = int(blkd['addr'])
-            except ValueError:
-                blkaddr = int(blkd['addr'], 16)
-            pph = dut._create_peripheral(blkname, blkaddr,
-                                         fullname=blkd.get('name','Block'),
+            pph = dut._create_peripheral(blkname, _readint(blkd['addr']),
+                                         fullname=blkd.get('name','Peripheral'),
                                          descr=blkd.get('descr',''))
             for regd in imap(devfile['registers'].get, blkd['registers']):
-                try:
-                    regaddr = int(regd['addr'])
-                except ValueError:
-                    regaddr = int(regd['addr'], 16)
-                reg = pph._create_register(regd['mnemonic'], regaddr,
+                reg = pph._create_register(regd['mnemonic'], _readint(regd['addr']),
                                            fullname=regd.get('name','Register'),
                                            descr=regd.get('descr',''))
                 for bitsd in imap(devfile['bitfields'].get, regd['bitfields']):
-                    try:
-                        bitmask = int(bitsd['mask'])
-                    except ValueError:
-                        bitmask = int(bitsd['mask'], 16)
-                    reg._create_bitfield(bitsd['mnemonic'], bitmask,
+                    reg._create_bitfield(bitsd['mnemonic'], _readint(bitsd['mask']),
                                          fullname=bitsd.get('name','BitField'),
                                          descr=bitsd.get('descr',''))
+        dut._sort()
+        return dut
+
+    @staticmethod
+    def from_svd(devfile, **kwargs):
+        import xml.etree.ElementTree as ET
+
+        svd = ET.parse(devfile).getroot()
+
+        name = svd.findtext('displayName', '')
+        mnem = svd.findtext('name')
+        descr = svd.findtext('description')
+        width = int(svd.findtext('width'))
+        vendor = svd.findtext('vendor', '')
+
+        dut = DUT(mnem, fullname=name, descr=descr, width=width, vendor=vendor)
+        for pphnode in svd.iter('peripheral'):
+            pphaddr = _readint(pphnode.findtext('baseAddress'))
+            pph = dut._create_peripheral(pphnode.findtext('name'), 
+                                         pphaddr,
+                                         fullname=pphnode.findtext('displayName', 'Peripheral'),
+                                         descr=pphnode.findtext('description', ''))
+            for regnode in pphnode.iter('register'):
+                reg = pph._create_register(regnode.findtext('name'),
+                                           _readint(regnode.findtext('addressOffset')) + pphaddr,
+                                           fullname=regnode.findtext('displayName', 'Register'),
+                                           descr=regnode.findtext('description', ''))
+                for bitnode in regnode.iter('field'):
+                    mask = _readint(bitnode.findtext('bitWidth')) << _readint(bitnode.findtext('bitOffset'))
+                    reg._create_bitfield(bitnode.findtext('name'),
+                                         mask,
+                                         fullname=bitnode.findtext('name','BitField'),
+                                         descr=bitnode.findtext('description',''))
         dut._sort()
         return dut
