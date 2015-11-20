@@ -1,3 +1,3 @@
-import dut
+import device
 import cortexm
 import blocks
