@@ -4,10 +4,11 @@ from itertools import imap
 import json
 
 def _readint(x):
-    try:
-        return int(x)
-    except ValueError:
+    if x.lower().startswith('0x'):
         return int(x, 16)
+    if x.startswith('#'):
+        raise Exception("Binary format not support")
+    return int(x)
 
 
 class Device(RootBlockNode):
@@ -102,6 +103,39 @@ class Device(RootBlockNode):
         return dev
 
     @staticmethod
+    def from_json(devfile, **kwargs):
+        if isinstance(devfile, basestring):
+            import re
+            fname = re.sub('\..*', '', devfile)
+            with open(devfile) as fh:
+                devfile = json.load(fh, **kwargs)
+        else:
+            fname = fh.name
+            devfile = json.load(fh, **kwargs)
+
+        name = devfile.get('name', 'Device')
+        mnem = devfile['mnemonic'] if devfile.get('mnemonic', '') else fname
+        descr = devfile.get('descr', '')
+        width = devfile.get('width',32)
+        vendor = devfile.get('vendor', '')
+
+        dev = Device(mnem, fullname=name, descr=descr, width=width, vendor=vendor)
+        for blkname, blkd in devfile['blocks'].iteritems():
+            pph = dev._create_peripheral(blkname, _readint(blkd['addr']),
+                                         fullname=blkd.get('name','Peripheral'),
+                                         descr=blkd.get('descr',''))
+            for regd in imap(devfile['registers'].get, blkd['registers']):
+                reg = pph._create_register(regd['mnemonic'], _readint(regd['addr']),
+                                           fullname=regd.get('name','Register'),
+                                           descr=regd.get('descr',''))
+                for bitsd in imap(devfile['bitfields'].get, regd['bitfields']):
+                    reg._create_bitfield(bitsd['mnemonic'], _readint(bitsd['mask']),
+                                         fullname=bitsd.get('name','BitField'),
+                                         descr=bitsd.get('descr',''))
+        dev._sort()
+        return dev
+
+    @staticmethod
     def from_pyconfig(devfile):
         """
         pyconfig Device definition files are required to have three
@@ -166,39 +200,6 @@ class Device(RootBlockNode):
         dev._sort()
         return dev
 
-
-    @staticmethod
-    def from_json(devfile, **kwargs):
-        if isinstance(devfile, basestring):
-            import re
-            fname = re.sub('\..*', '', devfile)
-            with open(devfile) as fh:
-                devfile = json.load(fh, **kwargs)
-        else:
-            fname = fh.name
-            devfile = json.load(fh, **kwargs)
-
-        name = devfile.get('name', 'Device')
-        mnem = devfile['mnemonic'] if devfile.get('mnemonic', '') else fname
-        descr = devfile.get('descr', '')
-        width = devfile.get('width',32)
-        vendor = devfile.get('vendor', '')
-
-        dev = Device(mnem, fullname=name, descr=descr, width=width, vendor=vendor)
-        for blkname, blkd in devfile['blocks'].iteritems():
-            pph = dev._create_peripheral(blkname, _readint(blkd['addr']),
-                                         fullname=blkd.get('name','Peripheral'),
-                                         descr=blkd.get('descr',''))
-            for regd in imap(devfile['registers'].get, blkd['registers']):
-                reg = pph._create_register(regd['mnemonic'], _readint(regd['addr']),
-                                           fullname=regd.get('name','Register'),
-                                           descr=regd.get('descr',''))
-                for bitsd in imap(devfile['bitfields'].get, regd['bitfields']):
-                    reg._create_bitfield(bitsd['mnemonic'], _readint(bitsd['mask']),
-                                         fullname=bitsd.get('name','BitField'),
-                                         descr=bitsd.get('descr',''))
-        dev._sort()
-        return dev
 
     @staticmethod
     def from_svd(devfile, **kwargs):
