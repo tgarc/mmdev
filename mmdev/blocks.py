@@ -71,7 +71,14 @@ class BlockNode(LeafBlockNode):
         """
         Attach a sub-block to this parent block
         """
-        setattr(self, subblock.mnemonic.lower(), subblock)
+        try: # check to see if this will overwrite an already existing attribute
+            getattr(self, subblock.mnemonic.lower())
+        except AttributeError:
+            setattr(self, subblock.mnemonic.lower(), subblock)
+        else:
+            raise Exception("Block '%s' would overwrite existing attribute or "\
+                            "subblock by the same name in '%s'." % (subblock.mnemonic, self.mnemonic))
+
         self._nodes.append(subblock)
 
         p = subblock.parent = self
@@ -81,22 +88,6 @@ class BlockNode(LeafBlockNode):
         # Ugly hack so root can find all nodes
         if isinstance(self.root, RootBlockNode):
             self.root._map[subblock.mnemonic.lower()] = subblock
-
-    def _create_subblock(self, mnemonic, fullname='', descr=''):
-        """
-        Create and attach a (non-addressable) sub-block to this parent block
-        """
-        subblock = BlockNode(mnemonic, fullname=fullname, descr=descr)
-        self._attach_subblock(subblock)
-        return subblock
-
-    def _create_peripheral(self, mnemonic, addr, fullname='', descr=''):
-        """
-        Create and attach a peripheral to this parent block
-        """
-        pph = Peripheral(mnemonic, addr, fullname=fullname, descr=descr)
-        self._attach_subblock(pph)
-        return pph
 
     def iterkeys(self):
         return iter(blk.mnemonic for blk in self._nodes)
@@ -146,14 +137,6 @@ class Peripheral(BlockNode):
         self.addr = addr
         self._fields += ['addr']
 
-    def _create_register(self, mnemonic, addr, fullname='', descr='', fmt=None):
-        """
-        Create and attach a register to this peripheral
-        """
-        reg = Register(mnemonic, addr, fullname=fullname, descr=descr)
-        self._attach_subblock(reg)
-        return reg
-
     def __repr__(self):
         return "<{:s} '{:s}' in {:s} '{:s}' at 0x{:08x}>".format(self.__class__.__name__, self.mnemonic, self.parent.__class__.__name__, self.parent.mnemonic, self.addr)
 
@@ -166,14 +149,6 @@ class RegisterValue(object):
 
 class Register(Peripheral):
     value = RegisterValue()
-
-    def _create_bitfield(self, mnemonic, mask, fullname='', descr=''):
-        """
-        Create and attach a bitfield to this register
-        """
-        bits = BitField(mnemonic, mask, fullname=fullname, descr=descr)
-        self._attach_subblock(bits)
-        return bits
 
 
 class RootBlockNode(BlockNode):
@@ -191,12 +166,3 @@ class RootBlockNode(BlockNode):
 
     def read(self, addr):
         return self._link.read(addr)
-
-class DeviceNode(RootBlockNode):
-    _fmt="{name:s} ({mnemonic:s}, {width:d}-bit, vendor={vendor:s})"
-
-    def __init__(self, mnemonic, fullname='', descr='', width=32, vendor=''):
-        super(Device, self).__init__(mnemonic, fullname=fullname, descr=descr)
-        self.width = width
-        self.vendor = vendor or 'Unknown'
-        self._fields += ['width', 'vendor']
