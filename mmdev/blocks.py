@@ -74,8 +74,7 @@ class BlockNode(LeafBlockNode):
         setattr(self, subblock.mnemonic.lower(), subblock)
         self._nodes.append(subblock)
 
-        subblock.parent = self
-        p = self
+        p = subblock.parent = self
         while p.parent is not None: p = p.parent
         subblock.root = p
 
@@ -192,3 +191,12 @@ class RootBlockNode(BlockNode):
 
     def read(self, addr):
         return self._link.read(addr)
+
+class DeviceNode(RootBlockNode):
+    _fmt="{name:s} ({mnemonic:s}, {width:d}-bit, vendor={vendor:s})"
+
+    def __init__(self, mnemonic, fullname='', descr='', width=32, vendor=''):
+        super(Device, self).__init__(mnemonic, fullname=fullname, descr=descr)
+        self.width = width
+        self.vendor = vendor or 'Unknown'
+        self._fields += ['width', 'vendor']
