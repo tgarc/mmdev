@@ -13,9 +13,9 @@ class Device(blocks.RootBlockNode):
         self._fields += ['width', 'vendor']
 
     def _sort(self):
-        self._nodes.sort(key=lambda blk: blk.addr, reverse=True)
+        self._nodes.sort(key=lambda blk: blk.address, reverse=True)
         for blkd in self._nodes:
-            blkd._nodes.sort(key=lambda blk: blk.addr, reverse=True)
+            blkd._nodes.sort(key=lambda blk: blk.address, reverse=True)
             for regd in blkd._nodes:
                 regd._nodes.sort(key=lambda blk: blk.mask, reverse=True)
 
@@ -28,12 +28,12 @@ class Device(blocks.RootBlockNode):
         for blkname, blk in self.iteritems():
             print >> fh, '#', blkname, blk.name
             print >> fh, '#', '='*58
-            print >> fh, blkfmt % (blkname.lower(), blk.addr)
+            print >> fh, blkfmt % (blkname.lower(), blk.address)
             print >> fh
             for regname, reg in blk.iteritems():
                 print >> fh, '#', regname.lower(), reg.name.lower()
                 print >> fh, '#', '-'*(len(regname)+len(reg.name)+1)
-                print >> fh, blkfmt % (regname.lower(),reg.addr)
+                print >> fh, blkfmt % (regname.lower(),reg.address)
                 for bfname, bits in reg.iteritems():
                     print >> fh, bitfmt % (bfname.lower(), bits.mask)
                 print >> fh
@@ -61,7 +61,7 @@ class Device(blocks.RootBlockNode):
             blkd['mnemonic'] = blk.mnemonic
             blkd['name'] = blk.name
             blkd['descr'] = blk.descr
-            blkd['addr'] = "0x%08x" % blk.addr
+            blkd['address'] = "0x%08x" % blk.address
             blknames.append(blkname)
 
             regnames = []
@@ -70,7 +70,7 @@ class Device(blocks.RootBlockNode):
                 regd['mnemonic'] = reg.mnemonic
                 regd['name'] = reg.name
                 regd['descr'] = reg.descr
-                regd['addr'] = "0x%08x" % reg.addr
+                regd['address'] = "0x%08x" % reg.address
                 regnames.append(regname)
 
                 bitnames = []
@@ -102,6 +102,14 @@ class Device(blocks.RootBlockNode):
         parse = parsers.PARSERS[file_format]
         dev = parse(devfile)
         dev._sort()
+
+        for pph in dev._nodes:
+            dev._map[pph.mnemonic.lower()] = pph
+            for reg in pph._nodes:
+                dev._map[reg.mnemonic.lower()] = reg
+                for bits in reg._nodes:
+                    dev._map[bits.mnemonic.lower()] = bits
+
         return dev
 
     @classmethod

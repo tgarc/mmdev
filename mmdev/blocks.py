@@ -7,42 +7,42 @@ _bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
 
 class LeafBlockNode(object):
     _fmt="{name:s} ({mnemonic:s})"
-    _subfmt="{_type:s} {mnemonic:s}"
+    _subfmt="{typename:s} {mnemonic:s}"
     
     def __init__(self, mnemonic, fullname='', descr=''):
         self.mnemonic = mnemonic
         self.name = fullname
-        self.descr = descr
-        self._type = self.__class__.__name__
+        self.description = descr
+        self.typename = self.__class__.__name__
         self.parent = None # parent is None until attached to another block
         self.root = self
-        self._fields = ['mnemonic', 'name', 'descr', '_type', 'parent']
+        self._fields = ['mnemonic', 'name', 'description', 'typename']
 
         if descr:
             self.__doc__ = descr
 
     @property
-    def _fmtdict(self):
+    def attrs(self):
         return {fn: getattr(self, fn) for fn in self._fields}
 
     def _ls(self):
-        return self._fmt.format(**self._fmtdict)
+        return self._fmt.format(**self.attrs)
 
     @property
     def ls(self):
         print self._ls()
 
     def __repr__(self):
-        return "<{:s} '{:s}'>".format(self.__class__.__name__, self.mnemonic)
+        return "<{:s} '{:s}'>".format(self.typename, self.mnemonic)
 
 
 class BitFieldValue(object):
     def __get__(self, inst, cls):
-        return (inst.root.read(inst.parent.addr+inst.addr) & inst.mask) >> inst.addr
+        return (inst.root.read(inst.parent.address+inst.address) & inst.mask) >> inst.address
     def __set__(self, inst, value):
-        addr = inst.parent.addr+inst.addr
-        value = (inst.root.read(addr) & ~inst.mask) | (value << inst.addr)
-        inst.root.write(addr, value)
+        address = inst.parent.address+inst.address
+        value = (inst.root.read(address) & ~inst.mask) | (value << inst.address)
+        inst.root.write(address, value)
 
 class BitField(LeafBlockNode):
     _fmt="{name:s} ({mnemonic:s}, 0x{mask:08X})"
@@ -55,11 +55,14 @@ class BitField(LeafBlockNode):
         # TODO: change to a 64 bit version of the lookup
         super(BitField, self).__init__(mnemonic, fullname=fullname, descr=descr)
         self.mask = mask
-        self.addr = _bruijn32lookup[_ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
-        self._fields += ['mask', 'addr']
+        self.address = _bruijn32lookup[_ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
+        self._fields += ['mask', 'address']
 
     def __repr__(self):
-        return "<{:s} '{:s}' in Register '{:s}' & 0x{:08x}>".format(self.__class__.__name__, self.mnemonic,self.parent.mnemonic,self.mask)
+        return "<{:s} '{:s}' in Register '{:s}' & 0x{:08x}>".format(self.typename, 
+                                                                    self.mnemonic, 
+                                                                    self.parent.mnemonic, 
+                                                                    self.mask)
 
     
 class BlockNode(LeafBlockNode):
@@ -76,18 +79,14 @@ class BlockNode(LeafBlockNode):
         except AttributeError:
             setattr(self, subblock.mnemonic.lower(), subblock)
         else:
-            raise Exception("Block '%s' would overwrite existing attribute or "\
-                            "subblock by the same name in '%s'." % (subblock.mnemonic, self.mnemonic))
+            raise ValueError("Block '%s' would overwrite existing attribute or "\
+                             "subblock by the same name in '%s'." % (subblock.mnemonic, self.mnemonic))
 
         self._nodes.append(subblock)
 
         p = subblock.parent = self
         while p.parent is not None: p = p.parent
         subblock.root = p
-
-        # Ugly hack so root can find all nodes
-        if isinstance(self.root, RootBlockNode):
-            self.root._map[subblock.mnemonic.lower()] = subblock
 
     def iterkeys(self):
         return iter(blk.mnemonic for blk in self._nodes)
@@ -109,43 +108,47 @@ class BlockNode(LeafBlockNode):
 
     @property
     def tree(self):
-        dstr = self._fmt.format(**self._fmtdict)
+        dstr = self._fmt.format(**self.attrs)
         substr = '\n'.join([blk._ls() for blk in self._nodes])
         print dstr + '\n' + substr if substr else dstr
 
     def _ls(self):
-        dstr = self._fmt.format(**self._fmtdict)
-        substr = "\n\t".join([blk._subfmt.format(**blk._fmtdict) for blk in self._nodes])
+        dstr = self._fmt.format(**self.attrs)
+        substr = "\n\t".join([blk._subfmt.format(**blk.attrs) for blk in self._nodes])
         return dstr + '\n\t' + substr if substr else dstr
 
     def __repr__(self):
         if self.parent is None:
             return super(BlockNode, self).__repr__()
-        return "<{:s} '{:s}' in {:s} '{:s}'>".format(self.__class__.__name__,
+        return "<{:s} '{:s}' in {:s} '{:s}'>".format(self.typename,
                                                      self.mnemonic,
-                                                     self.parent.__class__.__name__,
+                                                     self.parent.typename,
                                                      self.parent.mnemonic)
 
 
 class Peripheral(BlockNode):
-    _fmt="{name:s} ({mnemonic:s}, 0x{addr:08X})"
-    _subfmt="0x{addr:08X} {mnemonic:s}"
+    _fmt="{name:s} ({mnemonic:s}, 0x{address:08X})"
+    _subfmt="0x{address:08X} {mnemonic:s}"
 
-    def __init__(self, mnemonic, addr, fullname='', descr=''):
+    def __init__(self, mnemonic, address, fullname='', descr=''):
         super(Peripheral, self).__init__(mnemonic, fullname=fullname, descr=descr)
 
-        self.addr = addr
-        self._fields += ['addr']
+        self.address = address
+        self._fields += ['address']
 
     def __repr__(self):
-        return "<{:s} '{:s}' in {:s} '{:s}' at 0x{:08x}>".format(self.__class__.__name__, self.mnemonic, self.parent.__class__.__name__, self.parent.mnemonic, self.addr)
+        return "<{:s} '{:s}' in {:s} '{:s}' at 0x{:08x}>".format(self.typename, 
+                                                                 self.mnemonic, 
+                                                                 self.parent.typename, 
+                                                                 self.parent.mnemonic, 
+                                                                 self.address)
 
 
 class RegisterValue(object):
     def __get__(self, inst, cls):
-        return inst.root.read(inst.addr)
+        return inst.root.read(inst.address)
     def __set__(self, inst, value):
-        inst.root.write(inst.addr, value)
+        inst.root.write(inst.address, value)
 
 class Register(Peripheral):
     value = RegisterValue()
@@ -161,8 +164,8 @@ class RootBlockNode(BlockNode):
     def find(self, key):
         return self._map.get(key.lower())
 
-    def write(self, addr, value):
-        self._link.write(addr, value)
+    def write(self, address, value):
+        self._link.write(address, value)
 
-    def read(self, addr):
-        return self._link.read(addr)
+    def read(self, address):
+        return self._link.read(address)
