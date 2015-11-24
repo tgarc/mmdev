@@ -22,21 +22,19 @@ BLK_DESCR = {}
 REG_DESCR = {}
 
 BIT_DESCR = {
-    'TPIU_TYPE': {
-        'TPIU_TYPE_b11': "Serial Wire Output (UART/NRZ) supported when this bit is set"
-      , 'TPIU_TYPE_b10': "Serial Wire Output (Machester encoding) supported when this bit is set"
-    }
-  , 'TPIU_SPPR': {
-        'MODE': "00: Synchronous Trace Port Mode\n01: Manchester\n10:, UART/NRZ\n11: Reserved"
-    }
-  , 'TPIU_ACPR': {
-        'PRESCALE': "Value used as a division ratio (baud rate prescaler). SWO output clock = Asynchronous_Reference_Cock/(value+1)"
-    }
-  , 'ITM_TCR' : {
-        'TSPrescale': "Timestamp prescaler, used with the trace packet reference clock. The reference clock source is selected by SWOENA. Defined as a power of four. These bits are cleared on Power-up reset."
-      , 'TXENA': "Enable hardware event packet emission to the TPIU from the DWT. This bit is cleared on Power-up reset."
-      , 'SWOENA': "Enables aysynchronous-specific usage model for timestamps (when TSENA==1).\n0: mode disabled\n1: Timestamp counter uses lineout (data related) clock from TPIU interface."
-     }
+      'TPIU_TYPE_b11': "Serial Wire Output (UART/NRZ) supported when this bit is set."
+    , 'TPIU_TYPE_b10': "Serial Wire Output (Machester encoding) supported when this bit is set."
+    , 'MODE': "00: Synchronous Trace Port Mode\n 01: Manchester\n 10: UART/NRZ\n 11: Reserved"
+    , 'PRESCALE': "Value used as a division ratio (baud rate prescaler). SWO output clock ="\
+                  "Asynchronous_Reference_Cock/(value+1)"
+    , 'TSPrescale': "Timestamp prescaler, used with the trace packet reference clock. The reference"\
+                    "clock source is selected by SWOENA. Defined as a power of"\
+                    "four. These bits are cleared on Power-up reset."
+    , 'TXENA':  "Enable hardware event packet emission to the TPIU from the DWT. This bit is"\
+                "cleared on Power-up reset."
+    , 'SWOENA': "Enables aysynchronous-specific usage model for timestamps (when TSENA==1).\n 0:"\
+                "mode disabled\n 1: Timestamp counter uses lineout (data"\
+                "related) clock from TPIU interface."
 }
 
 REG_MAP = {
