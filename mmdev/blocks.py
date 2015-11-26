@@ -25,6 +25,10 @@ class LeafBlockNode(object):
     def attrs(self):
         return {fn: getattr(self, fn) for fn in self._fields}
 
+    def _tree(self, pfx='', last=False):
+        tag='`-- ' if last else '|-- '
+        return pfx + tag + self._fmt.format(**self.attrs)
+
     def _ls(self):
         return self._fmt.format(**self.attrs)
 
@@ -106,16 +110,24 @@ class BlockNode(LeafBlockNode):
     def itervalues(self):
         return iter(self._nodes)
 
+    def _tree(self, pfx='', last=False):
+        headerstr = super(BlockNode, self)._tree(pfx, last)
+        sfx = '    ' if last else '|   '
+        treestr = '\n'.join([blk._tree(pfx + sfx) for blk in self._nodes[:-1]])
+        if len(self._nodes) > 1: 
+            treestr += '\n'
+        if len(self._nodes):
+            treestr += self._nodes[-1]._tree(pfx + sfx, last=True)
+        return headerstr + '\n' + treestr if treestr else headerstr
+
     @property
     def tree(self):
-        dstr = self._fmt.format(**self.attrs)
-        substr = '\n'.join([blk._ls() for blk in self._nodes])
-        print dstr + '\n' + substr if substr else dstr
+        print self._tree(last=True)[4:]
 
     def _ls(self):
-        dstr = self._fmt.format(**self.attrs)
+        headerstr = self._fmt.format(**self.attrs)
         substr = "\n\t".join([blk._subfmt.format(**blk.attrs) for blk in self._nodes])
-        return dstr + '\n\t' + substr if substr else dstr
+        return headerstr + '\n\t' + substr if substr else headerstr
 
     def __repr__(self):
         if self.parent is None:
