@@ -103,12 +103,14 @@ class Device(blocks.RootBlockNode):
         dev = parse(devfile)
         dev._sort()
 
-        for pph in dev._nodes:
-            dev._map[pph.mnemonic.lower()] = pph
-            for reg in pph._nodes:
-                dev._map[reg.mnemonic.lower()] = reg
-                for bits in reg._nodes:
-                    dev._map[bits.mnemonic.lower()] = bits
+        for blk in dev.walk():
+            key = blk.mnemonic.lower()
+            if key in dev._map:
+                if not isinstance(dev._map[key], list):
+                    dev._map[key] = [dev._map[key]]
+                dev._map[key].append(blk)
+            else:
+                dev._map[key] = blk
 
         return dev
 

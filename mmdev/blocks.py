@@ -1,3 +1,4 @@
+import itertools
 import ctypes as _ctypes
 from link import Link
 
@@ -25,9 +26,9 @@ class LeafBlockNode(object):
     def attrs(self):
         return {fn: getattr(self, fn) for fn in self._fields}
 
-    def _tree(self, pfx='', last=False):
+    def _tree(self, pfx='', last=False, l=-1):
         tag='`-- ' if last else '|-- '
-        return pfx + tag + self._fmt.format(**self.attrs)
+        return pfx + tag + self._subfmt.format(**self.attrs)
 
     def _ls(self):
         return self._fmt.format(**self.attrs)
@@ -110,19 +111,45 @@ class BlockNode(LeafBlockNode):
     def itervalues(self):
         return iter(self._nodes)
 
-    def _tree(self, pfx='', last=False):
+    def walk(self):
+        blocks = [self]
+        
+        while blocks:
+            blk = blocks.pop(0)
+            blocks.extend(getattr(blk, '_nodes', []))
+            yield blk
+
+    def _tree(self, pfx='', last=False, l=-1):
+        if l == 0: 
+            return
+
         headerstr = super(BlockNode, self)._tree(pfx, last)
-        sfx = '    ' if last else '|   '
-        treestr = '\n'.join([blk._tree(pfx + sfx) for blk in self._nodes[:-1]])
-        if len(self._nodes) > 1: 
-            treestr += '\n'
-        if len(self._nodes):
-            treestr += self._nodes[-1]._tree(pfx + sfx, last=True)
-        return headerstr + '\n' + treestr if treestr else headerstr
+        pfx += '    ' if last else '|   '
+
+        treestr = ''
+        if l != 1 and len(self._nodes):
+            treestr = []
+            if len(self._nodes) > 1:
+                treestr = [blk._tree(pfx, l=l-1) for blk in self._nodes[:-1]]
+            treestr.append(self._nodes[-1]._tree(pfx, last=True, l=l-1))
+            treestr = '\n' + '\n'.join(treestr)
+        return headerstr + treestr
 
     @property
-    def tree(self):
-        print self._tree(last=True)[4:]
+    def tree(self, l=2):
+        if l == 0: 
+            return
+
+        headerstr = self._fmt.format(**self.attrs)
+
+        treestr = ''
+        if len(self._nodes):
+            treestr = []
+            if len(self._nodes) > 1:
+                treestr = [blk._tree(l=l) for blk in self._nodes[:-1]]
+            treestr.append(self._nodes[-1]._tree(last=True, l=l))
+            treestr = '\n' + '\n'.join(treestr)
+        print headerstr + treestr
 
     def _ls(self):
         headerstr = self._fmt.format(**self.attrs)
