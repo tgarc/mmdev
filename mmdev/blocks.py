@@ -111,13 +111,19 @@ class BlockNode(LeafBlockNode):
     def itervalues(self):
         return iter(self._nodes)
 
-    def walk(self):
+    def walk(self, l=-1):
         blocks = [self]
-        
-        while blocks:
+        d = 1
+        while blocks and l != 0:
             blk = blocks.pop(0)
-            blocks.extend(getattr(blk, '_nodes', []))
+            d -= 1
+
             yield blk
+
+            blocks.extend(getattr(blk, '_nodes', []))
+            if d == 0:
+                d = len(blocks)
+                l -= 1
 
     def _tree(self, pfx='', last=False, l=-1):
         if l == 0: 
