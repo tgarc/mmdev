@@ -44,18 +44,9 @@ class LeafBlockNode(object):
         return "<{:s} '{:s}'>".format(self.typename, self.mnemonic)
 
 
-class BitFieldValue(object):
-    def __get__(self, inst, cls):
-        return (inst.root.read(inst.parent.address+inst.address) & inst.mask) >> inst.address
-    def __set__(self, inst, value):
-        address = inst.parent.address+inst.address
-        value = (inst.root.read(address) & ~inst.mask) | (value << inst.address)
-        inst.root.write(address, value)
-
 class BitField(LeafBlockNode):
     _fmt="{name:s} ({mnemonic:s}, 0x{mask:08X})"
     _subfmt="0x{mask:08X} {mnemonic:s}"
-    value = BitFieldValue()
 
     def __init__(self, mnemonic, mask, fullname='', descr=''):
         # calculate the bit offset from the mask using a debruijn hash function
@@ -66,6 +57,15 @@ class BitField(LeafBlockNode):
         self.address = _bruijn32lookup[_ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
         self._fields += ['mask', 'address']
 
+    @property
+    def value(self):
+        return (self.parent.value & self.mask) >> self.address
+
+    @value.setter
+    def value(self, value):
+        regvalue = (self.parent.value & ~self.mask) | (value << self.address)
+        self.parent.value = regvalue
+
     def __repr__(self):
         return "<{:s} '{:s}' in Register '{:s}' & 0x{:08x}>".format(self.typename, 
                                                                     self.mnemonic, 
@@ -74,27 +74,25 @@ class BitField(LeafBlockNode):
 
     
 class BlockNode(LeafBlockNode):
-    def __init__(self, mnemonic, fullname='', descr=''):
+    def __init__(self, mnemonic, subblocks, fullname='', descr=''):
         super(BlockNode, self).__init__(mnemonic, fullname=fullname, descr=descr)
+
         self._nodes = []
+        for blk in subblocks:
+            try:
+                getattr(self, blk.mnemonic.lower())
+            except AttributeError:
+                setattr(self, blk.mnemonic.lower(), blk)
+            else:
+                raise ValueError("Block '%s' would overwrite existing attribute \
+                                  or subblock by the same name in '%s'."
+                                 % (blk.mnemonic, self.mnemonic))
+            self._nodes.append(blk)
 
-    def _attach_subblock(self, subblock):
-        """
-        Attach a sub-block to this parent block
-        """
-        try: # check to see if this will overwrite an already existing attribute
-            getattr(self, subblock.mnemonic.lower())
-        except AttributeError:
-            setattr(self, subblock.mnemonic.lower(), subblock)
-        else:
-            raise ValueError("Block '%s' would overwrite existing attribute or "\
-                             "subblock by the same name in '%s'." % (subblock.mnemonic, self.mnemonic))
-
-        self._nodes.append(subblock)
-
-        p = subblock.parent = self
-        while p.parent is not None: p = p.parent
-        subblock.root = p
+            blk.root = blk.parent = self
+            if hasattr(blk, 'walk'):
+                for subblk in blk.walk():
+                    subblk.root = self
 
     def iterkeys(self):
         return iter(blk.mnemonic for blk in self._nodes)
@@ -162,8 +160,8 @@ class Peripheral(BlockNode):
     _fmt="{name:s} ({mnemonic:s}, 0x{address:08X})"
     _subfmt="0x{address:08X} {mnemonic:s}"
 
-    def __init__(self, mnemonic, address, fullname='', descr=''):
-        super(Peripheral, self).__init__(mnemonic, fullname=fullname, descr=descr)
+    def __init__(self, mnemonic, address, subblocks, fullname='', descr=''):
+        super(Peripheral, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr)
 
         self.address = address
         self._fields += ['address']
@@ -176,20 +174,20 @@ class Peripheral(BlockNode):
                                                                  self.address)
 
 
-class RegisterValue(object):
-    def __get__(self, inst, cls):
-        return inst.root.read(inst.address)
-    def __set__(self, inst, value):
-        inst.root.write(inst.address, value)
-
 class Register(Peripheral):
-    value = RegisterValue()
+    @property
+    def value(self):
+        return self.root.read(self.address)
+
+    @value.setter
+    def value(self, value):
+        self.root.write(self.address, value)
 
 
 class RootBlockNode(BlockNode):
 
-    def __init__(self, mnemonic, link=None, fullname='', descr=''):
-        super(RootBlockNode, self).__init__(mnemonic, fullname=fullname, descr=descr)
+    def __init__(self, mnemonic, blocks, link=None, fullname='', descr=''):
+        super(RootBlockNode, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr)
         self._link = Link()
         self._map = {}
 

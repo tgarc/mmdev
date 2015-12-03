@@ -28,12 +28,11 @@ class SVDParser(DeviceParser):
         # defrval = _readint(svd.findtext('resetValue'))
         # defrmsk = _readint(svd.findtext('resetMask'))
 
-        dev = Device(mnem, fullname=name, descr=descr, width=width, vendor=vendor)
+        pphs = []
         for pphnode in svd.iter('peripheral'):
-            pph = cls.parse_peripheral(pphnode)
-            dev._attach_subblock(pph)
+            pphs.append(cls.parse_peripheral(pphnode))
 
-        return dev
+        return Device(mnem, pphs, fullname=name, descr=descr, width=width, vendor=vendor)
 
     @classmethod
     def parse_bitfield(cls, bitnode):
@@ -46,26 +45,26 @@ class SVDParser(DeviceParser):
 
     @classmethod
     def parse_register(cls, regnode, baseaddr):
-        reg = Register(regnode.findtext('name'),
-                       _readint(regnode.findtext('addressOffset')) + baseaddr,
-                       fullname=regnode.findtext('displayName','Register'),
-                       descr=regnode.findtext('description'),)
+        bits = []
         for bitnode in regnode.findall('.//field'):
-            bits = cls.parse_bitfield(bitnode)
-            reg._attach_subblock(bits)
+            bits.append(cls.parse_bitfield(bitnode))
 
-        return reg
+        return Register(regnode.findtext('name'),
+                        _readint(regnode.findtext('addressOffset')) + baseaddr,
+                        bits,
+                        fullname=regnode.findtext('displayName','Register'),
+                        descr=regnode.findtext('description'),)
 
     @classmethod
     def parse_peripheral(cls, pphnode):
         pphaddr = _readint(pphnode.findtext('baseAddress'))
-        pph = Peripheral(pphnode.findtext('name'), 
-                         pphaddr,
-                         fullname=pphnode.findtext('displayName', 'Peripheral'),
-                         descr=pphnode.findtext('description', ''))
-
+        regs = []
         for regnode in pphnode.findall('./registers/register'):
-            reg = cls.parse_register(regnode, pphaddr)
-            pph._attach_subblock(reg)
+            regs.append(cls.parse_register(regnode, pphaddr))
 
-        return pph
+        return Peripheral(pphnode.findtext('name'), 
+                          pphaddr,
+                          regs,
+                          fullname=pphnode.findtext('displayName', 'Peripheral'),
+                          descr=pphnode.findtext('description', ''))
+

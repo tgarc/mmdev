@@ -39,27 +39,23 @@ class PYCFGParser(DeviceParser):
 
     @classmethod
     def parse_peripheral(cls, pphname, pphaddr, devfile):
-        pph = Peripheral(pphname, pphaddr,
-                         fullname=devfile.BLK_NAME.get(pphname,'Peripheral'),
-                         descr=devfile.BLK_DESCR.get(pphname,''))
-
+        regs = []
         for regname, regaddr in devfile.REG_MAP.get(pphname,{}).iteritems():
-            reg = cls.parse_register(regname, regaddr, devfile)
-            pph._attach_subblock(reg)
+            regs.append(cls.parse_register(regname, regaddr, devfile))
 
-        return pph
+        return Peripheral(pphname, pphaddr, regs,
+                          fullname=devfile.BLK_NAME.get(pphname,'Peripheral'),
+                          descr=devfile.BLK_DESCR.get(pphname,''))
 
     @classmethod
     def parse_register(cls, regname, regaddr, devfile):
-        reg = Register(regname, regaddr,
-                       fullname=devfile.REG_NAME.get(regname,'Register'),
-                       descr=devfile.REG_DESCR.get(regname,''))
-
+        bits = []
         for bitname, bitmask in devfile.BIT_MAP.get(regname,{}).iteritems():
-            bits = cls.parse_bitfield(bitname, bitmask, devfile)
-            reg._attach_subblock(bits)
+            bits.append(cls.parse_bitfield(bitname, bitmask, devfile))
 
-        return reg
+        return Register(regname, regaddr, bits,
+                        fullname=devfile.REG_NAME.get(regname,'Register'),
+                        descr=devfile.REG_DESCR.get(regname,''))
 
     @classmethod
     def parse_bitfield(cls, bitname, bitmask, devfile):
@@ -82,11 +78,10 @@ class PYCFGParser(DeviceParser):
         width = getattr(devfile, 'width', 32)
         vendor = getattr(devfile, 'vendor', '')        
 
-        dev = Device(mnem, fullname=name, descr=descr, width=width, vendor=vendor)
-
+        pphs = []
         for pphname, pphaddr in devfile.BLK_MAP.iteritems():
-            pph = cls.parse_peripheral(pphname, pphaddr, devfile)
-            dev._attach_subblock(pph)
+            pphs.append(cls.parse_peripheral(pphname, pphaddr, devfile))
 
-        return dev
+        return Device(mnem, pphs, 
+                      fullname=name, descr=descr, width=width, vendor=vendor)
 

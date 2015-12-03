@@ -6,8 +6,8 @@ import blocks
 class Device(blocks.RootBlockNode):
     _fmt="{name:s} ({mnemonic:s}, {width:d}-bit, vendor={vendor:s})"
 
-    def __init__(self, mnemonic, fullname='', descr='', width=32, vendor=''):
-        super(Device, self).__init__(mnemonic, fullname=fullname, descr=descr)
+    def __init__(self, mnemonic, blocks, fullname='', descr='', width=32, vendor=''):
+        super(Device, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr)
         self.width = width
         self.vendor = vendor or 'Unknown'
         self._fields += ['width', 'vendor']
