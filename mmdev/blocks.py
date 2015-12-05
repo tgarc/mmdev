@@ -1,9 +1,19 @@
 import itertools
 import ctypes as _ctypes
-from link import Link
 
 _bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
                    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
+
+
+def _attach_subblocks(block, subblocks):
+    for blk in subblocks:
+        try:
+            getattr(block, blk.mnemonic.lower())
+        except AttributeError:
+            setattr(block, blk.mnemonic.lower(), blk)
+        else:
+            raise ValueError("Block '%s' would overwrite existing attribute \
+                              or subblock by the same name" % blk.mnemonic)
 
 
 class LeafBlock(object):
@@ -91,32 +101,21 @@ class DescriptorBlock(LeafBlock):
         return self.value | other
 
 
-
 class Block(LeafBlock):
 
-    def __init__(self, mnemonic, subblocks, fullname='', descr=''):
+    def __init__(self, mnemonic, subblocks, fullname='', descr='', dynamic=False):
         super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr)
+
+        if not dynamic:
+            _attach_subblocks(self, subblocks)
 
         self._nodes = subblocks
         for blk in self._nodes:
-            if not hasattr(self.__class__, blk.mnemonic.lower()):
-                setattr(self, blk.mnemonic.lower(), blk)
             blk.root = blk.parent = self
             if hasattr(blk, 'walk'):
                 for subblk in blk.walk():
                     subblk.root = self
 
-    @classmethod
-    def _attach_subblocks(cls, subblocks):
-        for blk in subblocks:
-            try:
-                getattr(cls, blk.mnemonic.lower())
-            except AttributeError:
-                setattr(cls, blk.mnemonic.lower(), blk)
-            else:
-                raise ValueError("Block '%s' would overwrite existing attribute \
-                                  or subblock by the same name" % blk.mnemonic)
-            
     def iterkeys(self):
         return iter(blk.mnemonic for blk in self._nodes)
 
@@ -135,8 +134,11 @@ class Block(LeafBlock):
     def itervalues(self):
         return iter(self._nodes)
 
-    def walk(self, l=-1):
-        blocks = list(self._nodes)
+    def _sort(self, key=None, reverse=True):
+        self._nodes.sort(key=key, reverse=reverse)
+
+    def walk(self, l=-1, root=False):
+        blocks = [self] if root else list(self._nodes)
         d = len(blocks)
         while blocks and l != 0:
             blk = blocks.pop(0)
@@ -183,8 +185,8 @@ class MemoryMappedBlock(Block):
     _fmt="{name:s} ({mnemonic:s}, 0x{address:08X})"
     _subfmt="0x{address:08X} {mnemonic:s}"
 
-    def __init__(self, mnemonic, address, subblocks, fullname='', descr=''):
-        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr)
+    def __init__(self, mnemonic, address, subblocks, fullname='', descr='', dynamic=False):
+        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr, dynamic=dynamic)
 
         self.address = address
         self._fields += ['address']
@@ -196,11 +198,13 @@ class MemoryMappedBlock(Block):
                                                                  self.parent.mnemonic, 
                                                                  self.address)
 
+
 def Peripheral(mnemonic, address, subblocks, fullname='', descr=''):
     class Peripheral(MemoryMappedBlock):
         pass
-    Peripheral._attach_subblocks(subblocks)
-    return Peripheral(mnemonic, address, subblocks, fullname=fullname, descr=descr)
+    _attach_subblocks(Peripheral, subblocks)
+    return Peripheral(mnemonic, address, subblocks, fullname=fullname, descr=descr, dynamic=True)
+
 
 def Register(mnemonic, address, subblocks, fullname='', descr=''):
     class Register(MemoryMappedBlock, DescriptorBlock):
@@ -208,8 +212,8 @@ def Register(mnemonic, address, subblocks, fullname='', descr=''):
             return self.root.read(self.address)
         def _write(self, value):
             return self.root.write(self.address, value)
-    Register._attach_subblocks(subblocks)
-    return Register(mnemonic, address, subblocks, fullname=fullname, descr=descr)
+    _attach_subblocks(Register, subblocks)
+    return Register(mnemonic, address, subblocks, fullname=fullname, descr=descr, dynamic=True)
 
 
 class BitField(DescriptorBlock):
@@ -237,21 +241,3 @@ class BitField(DescriptorBlock):
                                                                     self.mnemonic, 
                                                                     self.parent.mnemonic, 
                                                                     self.mask)
-
-
-
-class RootBlock(Block):
-
-    def __init__(self, mnemonic, blocks, link=None, fullname='', descr=''):
-        super(RootBlock, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr)
-        self._link = Link()
-        self._map = {}
-
-    def find(self, key):
-        return self._map.get(key.lower())
-
-    def write(self, address, value):
-        self._link.write(address, value)
-
-    def read(self, address):
-        return self._link.read(address)

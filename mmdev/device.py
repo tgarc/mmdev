@@ -1,23 +1,41 @@
 from collections import OrderedDict
 import parsers
 import blocks
+from link import Link
 
 
-class Device(blocks.RootBlock):
+class Device(blocks.Block):
     _fmt="{name:s} ({mnemonic:s}, {width:d}-bit, vendor={vendor:s})"
 
     def __init__(self, mnemonic, blocks, fullname='', descr='', width=32, vendor=''):
         super(Device, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr)
+        self._link = Link()
+
         self.width = width
         self.vendor = vendor or 'Unknown'
         self._fields += ['width', 'vendor']
 
-    def _sort(self):
-        self._nodes.sort(key=lambda blk: blk.address, reverse=True)
-        for blkd in self._nodes:
-            blkd._nodes.sort(key=lambda blk: blk.address, reverse=True)
-            for regd in blkd._nodes:
-                regd._nodes.sort(key=lambda blk: blk.mask, reverse=True)
+        self._map = {}
+        for blk in self.walk():
+            key = blk.mnemonic.lower()
+            if key in self._map:
+                if not isinstance(self._map[key], list):
+                    self._map[key] = [self._map[key]]
+                self._map[key].append(blk)
+            else:
+                self._map[key] = blk
+
+        for blk in self.walk(3, root=True):
+            blk._sort(key=lambda blk: blk.address)
+
+    def find(self, key):
+        return self._map.get(key.lower())
+
+    def write(self, address, value):
+        self._link.write(address, value)
+
+    def read(self, address):
+        return self._link.read(address)
 
     def to_gdbinit(self):
         import StringIO
@@ -100,19 +118,7 @@ class Device(blocks.RootBlock):
         Parse a device file using the given file format
         """
         parse = parsers.PARSERS[file_format]
-        dev = parse(devfile)
-        dev._sort()
-
-        for blk in dev.walk():
-            key = blk.mnemonic.lower()
-            if key in dev._map:
-                if not isinstance(dev._map[key], list):
-                    dev._map[key] = [dev._map[key]]
-                dev._map[key].append(blk)
-            else:
-                dev._map[key] = blk
-
-        return dev
+        return parse(devfile)
 
     @classmethod
     def from_json(cls, devfile):
