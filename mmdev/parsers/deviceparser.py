@@ -1,7 +1,3 @@
-from mmdev.device import Device
-from mmdev.blocks import BitField, Register, Peripheral
-
-
 class DeviceParser(object):
     def __new__(cls, devfile):
         return cls.parse_device(devfile)

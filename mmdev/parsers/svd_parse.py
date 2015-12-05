@@ -1,5 +1,6 @@
-from deviceparser import *
 import xml.etree.ElementTree as ET
+from mmdev.parsers.deviceparser import DeviceParser
+from mmdev.device import Device, Peripheral, Register, BitField
 
 
 def _readint(x):

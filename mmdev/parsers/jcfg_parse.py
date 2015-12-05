@@ -1,6 +1,7 @@
-from deviceparser import *
 import json
 from itertools import imap
+from mmdev.parsers.deviceparser import DeviceParser
+from mmdev.device import Device, Peripheral, Register, BitField
 
 
 def _readint(x):

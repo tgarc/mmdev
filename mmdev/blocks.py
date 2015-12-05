@@ -1,10 +1,3 @@
-import itertools
-import ctypes as _ctypes
-
-_bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
-                   31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
-
-
 def _attach_subblocks(block, subblocks):
     for blk in subblocks:
         try:
@@ -197,47 +190,3 @@ class MemoryMappedBlock(Block):
                                                                  self.parent.typename, 
                                                                  self.parent.mnemonic, 
                                                                  self.address)
-
-
-def Peripheral(mnemonic, address, subblocks, fullname='', descr=''):
-    class Peripheral(MemoryMappedBlock):
-        pass
-    _attach_subblocks(Peripheral, subblocks)
-    return Peripheral(mnemonic, address, subblocks, fullname=fullname, descr=descr, dynamic=True)
-
-
-def Register(mnemonic, address, subblocks, fullname='', descr=''):
-    class Register(MemoryMappedBlock, DescriptorBlock):
-        def _read(self):
-            return self.root.read(self.address)
-        def _write(self, value):
-            return self.root.write(self.address, value)
-    _attach_subblocks(Register, subblocks)
-    return Register(mnemonic, address, subblocks, fullname=fullname, descr=descr, dynamic=True)
-
-
-class BitField(DescriptorBlock):
-    _fmt="{name:s} ({mnemonic:s}, 0x{mask:08X})"
-    _subfmt="0x{mask:08X} {mnemonic:s}"
-
-    def __init__(self, mnemonic, mask, fullname='', descr=''):
-        # calculate the bit offset from the mask using a debruijn hash function
-        # use ctypes to truncate the result to a uint32
-        # TODO: change to a 64 bit version of the lookup
-        super(BitField, self).__init__(mnemonic, fullname=fullname, descr=descr)
-        self.mask = mask
-        self.address = _bruijn32lookup[_ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
-        self._fields += ['mask', 'address']
-
-    def _read(self):
-        return (self.parent.value & self.mask) >> self.address
-
-    def _write(self, value):
-        regvalue = (self.parent.value & ~self.mask) | (value << self.address)
-        self.parent.value = regvalue
-
-    def __repr__(self):
-        return "<{:s} '{:s}' in Register '{:s}' & 0x{:08x}>".format(self.typename, 
-                                                                    self.mnemonic, 
-                                                                    self.parent.mnemonic, 
-                                                                    self.mask)
