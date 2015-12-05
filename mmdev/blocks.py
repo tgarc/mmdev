@@ -1,14 +1,3 @@
-def _attach_subblocks(block, subblocks):
-    for blk in subblocks:
-        try:
-            getattr(block, blk.mnemonic.lower())
-        except AttributeError:
-            setattr(block, blk.mnemonic.lower(), blk)
-        else:
-            raise ValueError("Block '%s' would overwrite existing attribute \
-                              or subblock by the same name" % blk.mnemonic)
-
-
 class LeafBlock(object):
     _fmt="{name:s} ({mnemonic:s})"
     _subfmt="{typename:s} {mnemonic:s}"
@@ -100,7 +89,7 @@ class Block(LeafBlock):
         super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr)
 
         if not dynamic:
-            _attach_subblocks(self, subblocks)
+            self._attach_subblocks(subblocks)
 
         self._nodes = subblocks
         for blk in self._nodes:
@@ -108,6 +97,17 @@ class Block(LeafBlock):
             if hasattr(blk, 'walk'):
                 for subblk in blk.walk():
                     subblk.root = self
+
+    @classmethod
+    def _attach_subblocks(cls, subblocks):
+        for blk in subblocks:
+            try:
+                getattr(cls, blk.mnemonic.lower())
+            except AttributeError:
+                setattr(cls, blk.mnemonic.lower(), blk)
+            else:
+                raise ValueError("Block '%s' would overwrite existing attribute \
+                                  or subblock by the same name" % blk.mnemonic)
 
     def iterkeys(self):
         return iter(blk.mnemonic for blk in self._nodes)
