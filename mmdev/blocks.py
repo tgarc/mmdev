@@ -6,7 +6,7 @@ _bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
                    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
 
 
-class LeafBlockNode(object):
+class LeafBlock(object):
     _fmt="{name:s} ({mnemonic:s})"
     _subfmt="{typename:s} {mnemonic:s}"
     
@@ -44,56 +44,79 @@ class LeafBlockNode(object):
         return "<{:s} '{:s}'>".format(self.typename, self.mnemonic)
 
 
-class BitField(LeafBlockNode):
-    _fmt="{name:s} ({mnemonic:s}, 0x{mask:08X})"
-    _subfmt="0x{mask:08X} {mnemonic:s}"
+class DescriptorBlock(LeafBlock):
+    def _read(self):
+        return
 
-    def __init__(self, mnemonic, mask, fullname='', descr=''):
-        # calculate the bit offset from the mask using a debruijn hash function
-        # use ctypes to truncate the result to a uint32
-        # TODO: change to a 64 bit version of the lookup
-        super(BitField, self).__init__(mnemonic, fullname=fullname, descr=descr)
-        self.mask = mask
-        self.address = _bruijn32lookup[_ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
-        self._fields += ['mask', 'address']
+    def _write(self, value):
+        return 
 
     @property
     def value(self):
-        return (self.parent.value & self.mask) >> self.address
+        return self._read()
 
     @value.setter
     def value(self, value):
-        regvalue = (self.parent.value & ~self.mask) | (value << self.address)
-        self.parent.value = regvalue
+        self._write(value)
 
-    def __repr__(self):
-        return "<{:s} '{:s}' in Register '{:s}' & 0x{:08x}>".format(self.typename, 
-                                                                    self.mnemonic, 
-                                                                    self.parent.mnemonic, 
-                                                                    self.mask)
+    def __set__(self, obj, value):
+        self.value = value
 
-    
-class BlockNode(LeafBlockNode):
+    def __invert__(self):
+        return ~self.value
+    def __ilshift__(self, other):
+        val = self.value << other
+        return val
+    def __irshift__(self, other):
+        val = self.value >> other
+        return val
+    def __iand__(self, other):
+        val = self.value & other
+        return val
+    def __ixor__(self, other):
+        val = self.value ^ other
+        return val
+    def __ior__(self, other):
+        val = self.value | other
+        return val
+    def __lshift__(self, other):
+        return self.value << other
+    def __rshift__(self, other):
+        return self.value >> other
+    def __and__(self, other):
+        return self.value & other
+    def __xor__(self, other):
+        return self.value ^ other
+    def __or__(self, other):
+        return self.value | other
+
+
+
+class Block(LeafBlock):
+
     def __init__(self, mnemonic, subblocks, fullname='', descr=''):
-        super(BlockNode, self).__init__(mnemonic, fullname=fullname, descr=descr)
+        super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr)
 
-        self._nodes = []
-        for blk in subblocks:
-            try:
-                getattr(self, blk.mnemonic.lower())
-            except AttributeError:
+        self._nodes = subblocks
+        for blk in self._nodes:
+            if not hasattr(self.__class__, blk.mnemonic.lower()):
                 setattr(self, blk.mnemonic.lower(), blk)
-            else:
-                raise ValueError("Block '%s' would overwrite existing attribute \
-                                  or subblock by the same name in '%s'."
-                                 % (blk.mnemonic, self.mnemonic))
-            self._nodes.append(blk)
-
             blk.root = blk.parent = self
             if hasattr(blk, 'walk'):
                 for subblk in blk.walk():
                     subblk.root = self
 
+    @classmethod
+    def _attach_subblocks(cls, subblocks):
+        for blk in subblocks:
+            try:
+                getattr(cls, blk.mnemonic.lower())
+            except AttributeError:
+                setattr(cls, blk.mnemonic.lower(), blk)
+            else:
+                raise ValueError("Block '%s' would overwrite existing attribute \
+                                  or subblock by the same name" % blk.mnemonic)
+            
     def iterkeys(self):
         return iter(blk.mnemonic for blk in self._nodes)
 
@@ -149,19 +172,19 @@ class BlockNode(LeafBlockNode):
 
     def __repr__(self):
         if self.parent is None:
-            return super(BlockNode, self).__repr__()
+            return super(Block, self).__repr__()
         return "<{:s} '{:s}' in {:s} '{:s}'>".format(self.typename,
                                                      self.mnemonic,
                                                      self.parent.typename,
                                                      self.parent.mnemonic)
 
 
-class Peripheral(BlockNode):
+class MemoryMappedBlock(Block):
     _fmt="{name:s} ({mnemonic:s}, 0x{address:08X})"
     _subfmt="0x{address:08X} {mnemonic:s}"
 
     def __init__(self, mnemonic, address, subblocks, fullname='', descr=''):
-        super(Peripheral, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr)
+        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr)
 
         self.address = address
         self._fields += ['address']
@@ -173,21 +196,54 @@ class Peripheral(BlockNode):
                                                                  self.parent.mnemonic, 
                                                                  self.address)
 
+def Peripheral(mnemonic, address, subblocks, fullname='', descr=''):
+    class Peripheral(MemoryMappedBlock):
+        pass
+    Peripheral._attach_subblocks(subblocks)
+    return Peripheral(mnemonic, address, subblocks, fullname=fullname, descr=descr)
 
-class Register(Peripheral):
-    @property
-    def value(self):
-        return self.root.read(self.address)
+def Register(mnemonic, address, subblocks, fullname='', descr=''):
+    class Register(MemoryMappedBlock, DescriptorBlock):
+        def _read(self):
+            return self.root.read(self.address)
+        def _write(self, value):
+            return self.root.write(self.address, value)
+    Register._attach_subblocks(subblocks)
+    return Register(mnemonic, address, subblocks, fullname=fullname, descr=descr)
 
-    @value.setter
-    def value(self, value):
-        self.root.write(self.address, value)
+
+class BitField(DescriptorBlock):
+    _fmt="{name:s} ({mnemonic:s}, 0x{mask:08X})"
+    _subfmt="0x{mask:08X} {mnemonic:s}"
+
+    def __init__(self, mnemonic, mask, fullname='', descr=''):
+        # calculate the bit offset from the mask using a debruijn hash function
+        # use ctypes to truncate the result to a uint32
+        # TODO: change to a 64 bit version of the lookup
+        super(BitField, self).__init__(mnemonic, fullname=fullname, descr=descr)
+        self.mask = mask
+        self.address = _bruijn32lookup[_ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
+        self._fields += ['mask', 'address']
+
+    def _read(self):
+        return (self.parent.value & self.mask) >> self.address
+
+    def _write(self, value):
+        regvalue = (self.parent.value & ~self.mask) | (value << self.address)
+        self.parent.value = regvalue
+
+    def __repr__(self):
+        return "<{:s} '{:s}' in Register '{:s}' & 0x{:08x}>".format(self.typename, 
+                                                                    self.mnemonic, 
+                                                                    self.parent.mnemonic, 
+                                                                    self.mask)
 
 
-class RootBlockNode(BlockNode):
+
+class RootBlock(Block):
 
     def __init__(self, mnemonic, blocks, link=None, fullname='', descr=''):
-        super(RootBlockNode, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr)
+        super(RootBlock, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr)
         self._link = Link()
         self._map = {}
 

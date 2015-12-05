@@ -3,7 +3,7 @@ import parsers
 import blocks
 
 
-class Device(blocks.RootBlockNode):
+class Device(blocks.RootBlock):
     _fmt="{name:s} ({mnemonic:s}, {width:d}-bit, vendor={vendor:s})"
 
     def __init__(self, mnemonic, blocks, fullname='', descr='', width=32, vendor=''):
