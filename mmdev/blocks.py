@@ -36,7 +36,7 @@ class LeafBlock(object):
         return "<{:s} '{:s}'>".format(self.typename, self.mnemonic)
 
 
-class DescriptorBlock(LeafBlock):
+class DescriptorMixin(object):
     def _read(self):
         return
 
@@ -57,20 +57,15 @@ class DescriptorBlock(LeafBlock):
     def __invert__(self):
         return ~self.value
     def __ilshift__(self, other):
-        val = self.value << other
-        return val
+        return self.value << other
     def __irshift__(self, other):
-        val = self.value >> other
-        return val
+        return self.value >> other
     def __iand__(self, other):
-        val = self.value & other
-        return val
+        return self.value & other
     def __ixor__(self, other):
-        val = self.value ^ other
-        return val
+        return self.value ^ other
     def __ior__(self, other):
-        val = self.value | other
-        return val
+        return self.value | other
     def __lshift__(self, other):
         return self.value << other
     def __rshift__(self, other):

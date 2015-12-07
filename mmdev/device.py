@@ -1,6 +1,6 @@
 import ctypes as _ctypes
 from collections import OrderedDict as _OrderedDict
-from mmdev.blocks import Block, DescriptorBlock, MemoryMappedBlock
+from mmdev.blocks import Block, DescriptorMixin, LeafBlock, MemoryMappedBlock
 from mmdev.link import Link
 
 _bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
@@ -145,7 +145,7 @@ def Peripheral(mnemonic, address, subblocks, fullname='', descr=''):
 
 
 def Register(mnemonic, address, subblocks, fullname='', descr=''):
-    class Register(MemoryMappedBlock, DescriptorBlock):
+    class Register(DescriptorMixin, MemoryMappedBlock):
         def _read(self):
             return self.root.read(self.address)
         def _write(self, value):
@@ -154,7 +154,7 @@ def Register(mnemonic, address, subblocks, fullname='', descr=''):
     return Register(mnemonic, address, subblocks, fullname=fullname, descr=descr, dynamic=True)
 
 
-class BitField(DescriptorBlock):
+class BitField(DescriptorMixin, LeafBlock):
     _fmt="{name:s} ({mnemonic:s}, 0x{mask:08X})"
     _subfmt="0x{mask:08X} {mnemonic:s}"
 
