@@ -80,11 +80,24 @@ class DescriptorMixin(object):
 
 class Block(LeafBlock):
 
-    def __init__(self, mnemonic, subblocks, fullname='', descr='', dynamic=False):
-        super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr)
+    def __new__(cls, mnemonic, subblocks, fullname='', descr='', dynamic=False, **kwargs):
+        newblk = super(Block, cls).__new__(cls, mnemonic, fullname=fullname, descr=descr)
 
-        if not dynamic:
-            self._attach_subblocks(subblocks)
+        mblk = cls if dynamic else newblk
+        for blk in subblocks:
+            try:
+                getattr(mblk, blk.mnemonic.lower())
+            except AttributeError:
+                setattr(mblk, blk.mnemonic.lower(), blk)
+            else:
+                raise ValueError("Block '%s' would overwrite existing attribute "   \
+                                 "or subblock by the same name in %s '%s'"          \
+                                 % (blk.mnemonic, cls.__name__, mnemonic))
+
+        return newblk
+
+    def __init__(self, mnemonic, subblocks, fullname='', descr='', dynamic=False, **kwargs):
+        super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr)
 
         self._nodes = subblocks
         for blk in self._nodes:
@@ -92,17 +105,6 @@ class Block(LeafBlock):
             if hasattr(blk, 'walk'):
                 for subblk in blk.walk():
                     subblk.root = self
-
-    @classmethod
-    def _attach_subblocks(cls, subblocks):
-        for blk in subblocks:
-            try:
-                getattr(cls, blk.mnemonic.lower())
-            except AttributeError:
-                setattr(cls, blk.mnemonic.lower(), blk)
-            else:
-                raise ValueError("Block '%s' would overwrite existing attribute \
-                                  or subblock by the same name" % blk.mnemonic)
 
     def iterkeys(self):
         return iter(blk.mnemonic for blk in self._nodes)
@@ -172,6 +174,9 @@ class Block(LeafBlock):
 class MemoryMappedBlock(Block):
     _fmt="{name:s} ({mnemonic:s}, 0x{address:08X})"
     _subfmt="0x{address:08X} {mnemonic:s}"
+
+    def __new__(cls, mnemonic, address, subblocks, fullname='', descr='', dynamic=False):
+        return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, fullname=fullname, descr=descr, dynamic=dynamic)
 
     def __init__(self, mnemonic, address, subblocks, fullname='', descr='', dynamic=False):
         super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr, dynamic=dynamic)

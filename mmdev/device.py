@@ -140,7 +140,6 @@ class Device(Block):
 def Peripheral(mnemonic, address, subblocks, fullname='', descr=''):
     class Peripheral(MemoryMappedBlock):
         pass
-    Peripheral._attach_subblocks(subblocks)
     return Peripheral(mnemonic, address, subblocks, fullname=fullname, descr=descr, dynamic=True)
 
 
@@ -150,7 +149,6 @@ def Register(mnemonic, address, subblocks, fullname='', descr=''):
             return self.root.read(self.address)
         def _write(self, value):
             return self.root.write(self.address, value)
-    Register._attach_subblocks(subblocks)
     return Register(mnemonic, address, subblocks, fullname=fullname, descr=descr, dynamic=True)
 
 
