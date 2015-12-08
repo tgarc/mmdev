@@ -18,7 +18,7 @@ Anyway, ``Device`` includes a ``from_xxxfmt`` function that calls out to the pro
 
 ### Sub-blocks as attributes
 
-A Device object is simply a collection of peripheral objects which are in turn collections of register objects which...well, you get the picture. Device objects and their constituent components (termed sub-blocks) are organized in a tree fashion with ``Device``, ``Register``, ``Peripheral``, and ``BitField`` all inheriting from the ``BlockNode`` class (i.e. all mmdev objects are blocks). At each block level, subblocks exist as attributes bound to their parent block by their mnemonic (shorthand name or abbreviation).
+The core classes in mmdev - ``Device``, ``Register``, ``Peripheral``, and ``BitField`` - are conceptually hardware blocks, which contain a number of sub-blocks (BitField is the exception). mmdev organizes this natural hierarchy into a Device "tree" where all classes inherit from a common ``Block`` type. At each block level, subblocks exist as attributes bound to their parent block by their mnemonic (shorthand name or abbreviation). Subblocks are also accessible using dict-type attributes ``keys``, ``values`` and their iter* counterparts.
 
 ```python
 >>> arm.
@@ -67,33 +67,34 @@ Device (STM32F20x, 32-bit, vendor=Unknown)
 ...
 ```
 
-``tree`` is very similar to ``ls`` but descends two block levels.
+``tree`` is very similar to ``ls`` but descends two block levels (you can call _tree() to print all levels).
 
 ```python
 >>> arm.dbg.tree
 Peripheral (DBG, 0xE0042000)
-DBGMCU_APB2_FZ (DBGMCU_APB2_FZ, 0xE004200C)
-        0x00040000 DBG_TIM11_STOP
-        0x00020000 DBG_TIM10_STOP
-        0x00010000 DBG_TIM9_STOP
-        0x00000002 DBG_TIM8_STOP
-        0x00000001 DBG_TIM1_STOP
-DBGMCU_APB1_FZ (DBGMCU_APB1_FZ, 0xE0042008)
-        0x04000000 DBG_CAN2_STOP
-        0x02000000 DBG_CAN1_STOP
-        0x00800000 DBG_J2C3SMBUS_TIMEOUT
-        0x00400000 DBG_J2C2_SMBUS_TIMEOUT
-        0x00200000 DBG_J2C1_SMBUS_TIMEOUT
-...
-DBGMCU_CR (DBGMCU_CR, 0xE0042004)
-        0x00000080 TRACE_MODE
-        0x00000020 TRACE_IOEN
-        0x00000004 DBG_STANDBY
-        0x00000002 DBG_STOP
-        0x00000001 DBG_SLEEP
-DBGMCU_IDCODE (DBGMCU_IDCODE, 0xE0042000)
-        0x00100000 REV_ID
-        0x0000000C DEV_ID
+|-- DBGMCU_APB2_FZ (DBGMCU_APB2_FZ, 0xE004200C)
+|   |-- BitField (DBG_TIM11_STOP, 0x00040000)
+|   |-- BitField (DBG_TIM10_STOP, 0x00020000)
+|   |-- BitField (DBG_TIM9_STOP, 0x00010000)
+|   |-- BitField (DBG_TIM8_STOP, 0x00000002)
+|   `-- BitField (DBG_TIM1_STOP, 0x00000001)
+|-- DBGMCU_APB1_FZ (DBGMCU_APB1_FZ, 0xE0042008)
+|   |-- BitField (DBG_CAN2_STOP, 0x04000000)
+|   |-- BitField (DBG_CAN1_STOP, 0x02000000)
+|   |-- BitField (DBG_J2C3SMBUS_TIMEOUT, 0x00800000)
+|   |-- BitField (DBG_J2C2_SMBUS_TIMEOUT, 0x00400000)
+|   |-- BitField (DBG_J2C1_SMBUS_TIMEOUT, 0x00200000)
+|   ...
+|   `-- BitField (DBG_TIM2_STOP, 0x00000001)
+|-- DBGMCU_CR (DBGMCU_CR, 0xE0042004)
+|   |-- BitField (TRACE_MODE, 0x00000080)
+|   |-- BitField (TRACE_IOEN, 0x00000020)
+|   |-- BitField (DBG_STANDBY, 0x00000004)
+|   |-- BitField (DBG_STOP, 0x00000002)
+|   `-- BitField (DBG_SLEEP, 0x00000001)
+`-- DBGMCU_IDCODE (DBGMCU_IDCODE, 0xE0042000)
+    |-- BitField (REV_ID, 0x00100000)
+    `-- BitField (DEV_ID, 0x0000000C)
 ```
 
 ### Encoding of device attributes
