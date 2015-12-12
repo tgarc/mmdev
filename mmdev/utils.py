@@ -1,3 +1,18 @@
+class HexValue(int):
+    def __new__(cls, x, bitwidth=0, base=None):
+        if base is None:
+            newint = super(HexValue, cls).__new__(cls, x)
+        else:
+            newint = super(HexValue, cls).__new__(cls, x, base=base)
+        div, mod = divmod(bitwidth, 4)
+        newint._fmt = ("0x{:0%dx}" % (div + bool(mod))).format
+        return newint
+
+    def __repr__(self):
+        return self._fmt(self)
+    def __str__(self):
+        return self._fmt(self)
+
 def to_gdbinit(dev):
     import StringIO
 

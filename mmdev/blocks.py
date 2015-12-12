@@ -1,3 +1,5 @@
+from utils import HexValue
+
 class LeafBlock(object):
     _fmt="{name:s} ({mnemonic:s})"
     _subfmt="{typename:s} {mnemonic:s}"
@@ -11,12 +13,15 @@ class LeafBlock(object):
         self.root = self
         self._fields = ['mnemonic', 'name', 'description', 'typename']
 
+        if not hasattr(self, '_subfmt'):
+            self._subfmt = self._fmt
+
         if descr:
             self.__doc__ = descr
 
     @property
     def attrs(self):
-        return {fn: getattr(self, fn) for fn in self._fields}
+        return { fn: getattr(self, fn) for fn in self._fields }
 
     def _tree(self, *args, **kwargs):
         return self._fmt.format(**self.attrs)
@@ -45,7 +50,7 @@ class DescriptorMixin(object):
 
     @property
     def value(self):
-        return self._read()
+        return HexValue(self._read(), self.root._width)
 
     @value.setter
     def value(self, value):
@@ -79,11 +84,12 @@ class DescriptorMixin(object):
 
 
 class Block(LeafBlock):
+    _dynamic = False
 
-    def __new__(cls, mnemonic, subblocks, fullname='', descr='', dynamic=False, **kwargs):
+    def __new__(cls, mnemonic, subblocks, fullname='', descr='', **kwargs):
         newblk = super(Block, cls).__new__(cls, mnemonic, fullname=fullname, descr=descr)
 
-        mblk = cls if dynamic else newblk
+        mblk = cls if cls._dynamic else newblk
         for blk in subblocks:
             try:
                 getattr(mblk, blk.mnemonic.lower())
@@ -96,7 +102,7 @@ class Block(LeafBlock):
 
         return newblk
 
-    def __init__(self, mnemonic, subblocks, fullname='', descr='', dynamic=False, **kwargs):
+    def __init__(self, mnemonic, subblocks, fullname='', descr='', **kwargs):
         super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr)
 
         self._nodes = subblocks
@@ -175,13 +181,13 @@ class MemoryMappedBlock(Block):
     _fmt="{name:s} ({mnemonic:s}, 0x{address:08X})"
     _subfmt="0x{address:08X} {mnemonic:s}"
 
-    def __new__(cls, mnemonic, address, subblocks, fullname='', descr='', dynamic=False):
-        return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, fullname=fullname, descr=descr, dynamic=dynamic)
+    def __new__(cls, mnemonic, address, subblocks, fullname='', descr=''):
+        return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, fullname=fullname, descr=descr)
 
-    def __init__(self, mnemonic, address, subblocks, fullname='', descr='', dynamic=False):
-        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr, dynamic=dynamic)
+    def __init__(self, mnemonic, address, subblocks, fullname='', descr=''):
+        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr)
 
-        self.address = address
+        self.address = HexValue(address)
         self._fields += ['address']
 
     def __repr__(self):
