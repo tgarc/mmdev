@@ -1,19 +1,23 @@
 import ctypes as _ctypes
-from collections import OrderedDict as _OrderedDict
-from mmdev.blocks import Block, DescriptorMixin, LeafBlock, MemoryMappedBlock
-from mmdev.link import Link
-from utils import HexValue
+import mmdev.blocks as blocks
+import mmdev.link as link
+import utils
 
 _bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
                    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
 
+_Formatters = {'Device': "{name} ({mnemonic}, {vendor})",
+               'Peripheral': blocks.MemoryMappedBlock._fmt,
+               'Register': blocks.MemoryMappedBlock._fmt,
+               'BitField': "{name} ({mnemonic}, 0x{mask:08X})" }
 
-class Device(Block):
-    _fmt="{name} ({mnemonic}, {vendor})"
+
+class Device(blocks.Block):
+    _fmt = _Formatters['Device']
 
     def __init__(self, mnemonic, blocks, fullname='', descr='', width=32, addressbits=8, vendor='Unknown Vendor'):
         super(Device, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr)
-        self._link = Link()
+        self._link = link.Link()
 
         self._width = width
         self._addressbits = addressbits
@@ -34,6 +38,20 @@ class Device(Block):
         for blk in self.walk(3, root=True):
             blk._sort(key=lambda blk: blk.address)
 
+    def set_block_format(self, blocktype, fmt):
+        """
+        Set format string for all blocks of a particular blocktype
+        
+        blocktype - str
+        Case-insesitive block typename. One of ('device', 'peripheral',
+        'register', 'bitfield').
+        """
+        blocktype = blocktype.lower()
+        assert blocktype in ('device', 'peripheral', 'register', 'bitfield')
+        for blk in self.walk():
+            if blk.typename.lower() == blocktype:
+                blk._fmt = fmt
+
     def find(self, key):
         return self._map.get(key.lower())
 
@@ -41,7 +59,7 @@ class Device(Block):
         self._link.write(address, value)
 
     def read(self, address):
-        return HexValue(self._link.read(address), self.root._width)
+        return utils.HexValue(self._link.read(address), self.root._width)
 
     @staticmethod
     def from_devfile(devfile, file_format):
@@ -66,8 +84,10 @@ class Device(Block):
     
 
 def Peripheral(mnemonic, address, subblocks, fullname='', descr=''):
-    class Peripheral(MemoryMappedBlock):
-        _dynamic=True
+    class Peripheral(blocks.MemoryMappedBlock):
+        _dynamic = True
+        _fmt = _Formatters['Peripheral']
+
         def __init__(self, mnemonic, address, subblocks, fullname='', descr='', interrupts=None):
             super(Peripheral, self).__init__(mnemonic, address, subblocks,
                                              fullname=fullname, descr=descr)
@@ -77,8 +97,10 @@ def Peripheral(mnemonic, address, subblocks, fullname='', descr=''):
 
 
 def Register(mnemonic, address, subblocks, resetValue, resetMask, fullname='', descr=''):
-    class Register(DescriptorMixin, MemoryMappedBlock):
+    class Register(blocks.DescriptorMixin, blocks.MemoryMappedBlock):
         _dynamic = True
+        _fmt = _Formatters['Register']
+
         def __new__(cls, mnemonic, address, subblocks, resetValue, resetMask,
                      fullname='', descr=''):
             return super(Register, cls).__new__(cls, mnemonic, address, subblocks,
@@ -87,8 +109,8 @@ def Register(mnemonic, address, subblocks, resetValue, resetMask, fullname='', d
         def __init__(self, mnemonic, address, subblocks, resetValue, resetMask,
                      fullname='', descr=''):
             super(Register, self).__init__(mnemonic, address, subblocks, fullname=fullname, descr=descr)
-            self.resetValue = HexValue(resetValue)
-            self.resetMask = HexValue(resetMask)
+            self.resetValue = utils.HexValue(resetValue)
+            self.resetMask = utils.HexValue(resetMask)
             self._fields += ['resetValue', 'resetMask']
             
         def _read(self):
@@ -100,8 +122,8 @@ def Register(mnemonic, address, subblocks, resetValue, resetMask, fullname='', d
     return Register(mnemonic, address, subblocks, resetValue, resetMask, fullname=fullname, descr=descr)
 
 
-class BitField(DescriptorMixin, LeafBlock):
-    _fmt="{name:s} ({mnemonic:s}, 0x{mask:08X})"
+class BitField(blocks.DescriptorMixin, blocks.LeafBlock):
+    _fmt = _Formatters['BitField']
     _subfmt="0x{mask:08X} {mnemonic:s}"
 
     def __init__(self, mnemonic, mask, fullname='', descr=''):
@@ -109,7 +131,7 @@ class BitField(DescriptorMixin, LeafBlock):
         # use ctypes to truncate the result to a uint32
         # TODO: change to a 64 bit version of the lookup
         super(BitField, self).__init__(mnemonic, fullname=fullname, descr=descr)
-        self.mask = HexValue(mask)
+        self.mask = utils.HexValue(mask)
         self.address = _bruijn32lookup[_ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
         self._fields += ['mask', 'address']
 
@@ -125,3 +147,19 @@ class BitField(DescriptorMixin, LeafBlock):
                                                                 self.parent.typename,
                                                                 self.parent.mnemonic, 
                                                                 self.mask)
+
+class _FormatManager(dict):
+    def __init__(self, formatters, *classes):
+        super(_FormatManager, self).__init__(**{cls.__name__: cls for cls in classes})
+        self._formatters = formatters
+
+    def __getitem__(self, i):
+        return self._formatters[i]
+
+    def __setitem__(self, i, y):
+        cls = super(_FormatManager, self).__getitem__(i)
+        if not cls in (Peripheral, Register):
+            setattr(cls, '_fmt', y)
+        self._formatters[i] = y
+
+Formatters = _FormatManager(_Formatters, Device, Peripheral, Register, BitField)

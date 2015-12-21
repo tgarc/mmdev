@@ -1,5 +1,6 @@
 from utils import HexValue
 
+
 class LeafBlock(object):
     _fmt="{name:s} ({mnemonic:s})"
     _subfmt="{typename:s} {mnemonic:s}"
@@ -17,7 +18,8 @@ class LeafBlock(object):
             self._subfmt = self._fmt
 
         if descr:
-            self.__doc__ = descr
+            self.description = ' '.join(l.strip() for l in descr.split('\n'))
+            self.__doc__ = self.description
 
     @property
     def attrs(self):

@@ -1,3 +1,6 @@
+import collections
+
+
 class HexValue(int):
     def __new__(cls, x, bitwidth=0, base=None):
         if base is None:
@@ -43,18 +46,18 @@ def to_json(dev, **kwargs):
     return json.dumps(dev.to_ordered_dict(), **kwargs)
 
 def to_ordered_dict(dev):
-    dct = _OrderedDict()
+    dct = collections.OrderedDict()
     dct['mnemonic'] = dev.mnemonic
     dct['name'] = dev.name
     dct['descr'] = dev.descr
 
-    blocks = _OrderedDict()
-    registers = _OrderedDict()
-    bitfields = _OrderedDict()
+    blocks = collections.OrderedDict()
+    registers = collections.OrderedDict()
+    bitfields = collections.OrderedDict()
 
     blknames = []
     for blkname, blk in dev.iteritems():
-        blkd = _OrderedDict()
+        blkd = collections.OrderedDict()
         blkd['mnemonic'] = blk.mnemonic
         blkd['name'] = blk.name
         blkd['descr'] = blk.descr
@@ -63,7 +66,7 @@ def to_ordered_dict(dev):
 
         regnames = []
         for regname, reg in blk.iteritems():
-            regd = _OrderedDict()
+            regd = collections.OrderedDict()
             regd['mnemonic'] = reg.mnemonic
             regd['name'] = reg.name
             regd['descr'] = reg.descr
@@ -72,7 +75,7 @@ def to_ordered_dict(dev):
 
             bitnames = []
             for bfname, bits in reg.iteritems():
-                bitsd = _OrderedDict()
+                bitsd = collections.OrderedDict()
                 bitsd['mnemonic'] = bits.mnemonic
                 bitsd['name'] = bits.name
                 bitsd['descr'] = bits.descr
