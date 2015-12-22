@@ -110,9 +110,9 @@ class Block(LeafBlock):
         self._nodes = subblocks
         for blk in self._nodes:
             blk.root = blk.parent = self
-            if hasattr(blk, 'walk'):
-                for subblk in blk.walk():
-                    subblk.root = self
+        
+        for blk in self.walk(l=2):
+            blk.root = self
 
     def iterkeys(self):
         return iter(blk.mnemonic for blk in self._nodes)
@@ -135,29 +135,34 @@ class Block(LeafBlock):
     def _sort(self, key=None, reverse=True):
         self._nodes.sort(key=key, reverse=reverse)
 
-    def walk(self, l=-1, root=False):
-        blocks = [self] if root else list(self._nodes)
-        d = len(blocks)
-        while blocks and l != 0:
-            blk = blocks.pop(0)
-            d -= 1
+    def walk(self, d=-1, l=1):
+        n = 1
+        blocks = [self]
 
-            yield blk
+        while blocks and d != 0:
+            blk = blocks.pop(0)
+            n -= 1
+
+            if l == 0:
+                yield blk
 
             blocks.extend(getattr(blk, '_nodes', []))
-            if d == 0:
-                d = len(blocks)
-                l -= 1
-
+            if n == 0:
+                n = len(blocks)
+                if l == 0:
+                    d -= 1
+                else:
+                    l -= 1
+            
     def _tree(self, l=-1, pfx=''):
         treestr = self._fmt.format(**self.attrs)
 
         if l == 0: 
             return treestr
 
-        for i, blk in enumerate(self._nodes):
+        for i, blk in enumerate(self._nodes, start=1):
             treestr += '\n'
-            if (i+1) == len(self._nodes):
+            if i == len(self._nodes):
                 treestr += pfx + '`-- ' + blk._tree(l=l-1, pfx=pfx + '    ')
                 continue
             

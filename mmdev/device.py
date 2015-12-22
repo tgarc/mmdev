@@ -11,6 +11,10 @@ _Formatters = {'Device': "{name} ({mnemonic}, {vendor})",
                'Register': blocks.MemoryMappedBlock._fmt,
                'BitField': "{name} ({mnemonic}, 0x{mask:08X})" }
 
+_levels = { 'device': 0, 
+            'peripheral': 1, 
+            'register': 2,
+            'bitfield': 3 }
 
 class Device(blocks.Block):
     _fmt = _Formatters['Device']
@@ -35,7 +39,7 @@ class Device(blocks.Block):
             else:
                 self._map[key] = blk
 
-        for blk in self.walk(3, root=True):
+        for blk in self.walk(3, l=0):
             blk._sort(key=lambda blk: blk.address)
 
     def set_block_format(self, blocktype, fmt):
@@ -46,11 +50,8 @@ class Device(blocks.Block):
         Case-insesitive block typename. One of ('device', 'peripheral',
         'register', 'bitfield').
         """
-        blocktype = blocktype.lower()
-        assert blocktype in ('device', 'peripheral', 'register', 'bitfield')
-        for blk in self.walk():
-            if blk.typename.lower() == blocktype:
-                blk._fmt = fmt
+        for blk in self.walk(d=1, l=_levels[blocktype.lower()]):
+            blk._fmt = fmt
 
     def find(self, key):
         return self._map.get(key.lower())
