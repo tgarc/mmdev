@@ -14,9 +14,6 @@ class LeafBlock(object):
         self.root = self
         self._fields = ['mnemonic', 'name', 'description', 'typename']
 
-        if not hasattr(self, '_subfmt'):
-            self._subfmt = self._fmt
-
         if descr:
             self.description = ' '.join(l.strip() for l in descr.split('\n'))
             self.__doc__ = self.description
@@ -28,16 +25,8 @@ class LeafBlock(object):
     def _tree(self, *args, **kwargs):
         return self._fmt.format(**self.attrs)
 
-    @property
-    def tree(self, l=2):
-        print self._tree(l)
-
     def _ls(self):
         return self._fmt.format(**self.attrs)
-
-    @property
-    def ls(self):
-        print self._ls()
 
     def __repr__(self):
         return "<{:s} '{:s}'>".format(self.typename, self.mnemonic)
@@ -154,26 +143,33 @@ class Block(LeafBlock):
                 else:
                     l -= 1
             
-    def _tree(self, l=-1, pfx=''):
+    def _tree(self, d=-1, pfx=''):
         treestr = self._fmt.format(**self.attrs)
 
-        if l == 0: 
+        if d == 0: 
             return treestr
 
         for i, blk in enumerate(self._nodes, start=1):
             treestr += '\n'
             if i == len(self._nodes):
-                treestr += pfx + '`-- ' + blk._tree(l=l-1, pfx=pfx + '    ')
-                continue
-            
-            treestr += pfx + '|-- ' + blk._tree(l=l-1, pfx=pfx + '|   ')
+                treestr += pfx + '`-- ' + blk._tree(d=d-1, pfx=pfx + '    ')
+            else:
+                treestr += pfx + '|-- ' + blk._tree(d=d-1, pfx=pfx + '|   ')
 
         return treestr
+
+    @property
+    def tree(self, d=2):
+        print self._tree(d=d)
 
     def _ls(self):
         headerstr = self._fmt.format(**self.attrs)
         substr = "\n\t".join([blk._subfmt.format(**blk.attrs) for blk in self._nodes])
         return headerstr + '\n\t' + substr if substr else headerstr
+
+    @property
+    def ls(self):
+        print self._ls()
 
     def __repr__(self):
         if self.parent is None:
