@@ -6,6 +6,11 @@ import utils
 _bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
                    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
 
+_levels = {'device': 0,
+           'peripheral': 1,
+           'register': 2,
+           'bitfield': 3}
+
 
 class Device(blocks.Block):
     _fmt = "{name} ({mnemonic}, {vendor})"
@@ -32,6 +37,10 @@ class Device(blocks.Block):
 
         for blk in self.walk(3, l=0):
             blk._sort(key=lambda blk: blk.address)
+
+    def set_format(self, blocktype, fmt):
+        for blk in self.walk(d=1, l=_levels[blocktype.lower()]):
+            blk._fmt = fmt
 
     def find(self, key):
         return self._map.get(key.lower())
@@ -126,22 +135,3 @@ class BitField(blocks.DescriptorMixin, blocks.LeafBlock):
                                                                 self.parent.typename,
                                                                 self.parent.mnemonic, 
                                                                 self.mask)
-
-class _FormatManager(dict):
-    def __init__(self, formatters):
-        super(_FormatManager, self).__init__(**{cls.__name__.lower(): bscls._fmt for cls, bscls in formatters.items()})
-        self._formatters = {cls.__name__.lower(): bscls for cls, bscls in formatters.items()}
-
-    def __getitem__(self, i):
-        return super(_FormatManager, self).__getitem__(i.lower())
-
-    def __setitem__(self, i, y):
-        cls = self._formatters[i.lower()]
-        cls._fmt = y
-        super(_FormatManager, self).__setitem__(i.lower(), y)
-
-
-formatters = _FormatManager({ Device: Device,
-                              Peripheral: blocks.MemoryMappedBlock,
-                              Register: blocks.MemoryMappedBlock,
-                              BitField: BitField })
