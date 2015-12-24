@@ -6,18 +6,9 @@ import utils
 _bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
                    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
 
-_Formatters = {'Device': "{name} ({mnemonic}, {vendor})",
-               'Peripheral': blocks.MemoryMappedBlock._fmt,
-               'Register': blocks.MemoryMappedBlock._fmt,
-               'BitField': "{name} ({mnemonic}, 0x{mask:08X})" }
-
-_levels = { 'device': 0, 
-            'peripheral': 1, 
-            'register': 2,
-            'bitfield': 3 }
 
 class Device(blocks.Block):
-    _fmt = _Formatters['Device']
+    _fmt = "{name} ({mnemonic}, {vendor})"
 
     def __init__(self, mnemonic, blocks, fullname='', descr='', width=32, addressbits=8, vendor='Unknown Vendor'):
         super(Device, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr)
@@ -41,17 +32,6 @@ class Device(blocks.Block):
 
         for blk in self.walk(3, l=0):
             blk._sort(key=lambda blk: blk.address)
-
-    def set_block_format(self, blocktype, fmt):
-        """
-        Set format string for all blocks of a particular blocktype
-        
-        blocktype - str
-        Case-insesitive block typename. One of ('device', 'peripheral',
-        'register', 'bitfield').
-        """
-        for blk in self.walk(d=1, l=_levels[blocktype.lower()]):
-            blk._fmt = fmt
 
     def find(self, key):
         return self._map.get(key.lower())
@@ -87,7 +67,6 @@ class Device(blocks.Block):
 def Peripheral(mnemonic, address, subblocks, fullname='', descr=''):
     class Peripheral(blocks.MemoryMappedBlock):
         _dynamic = True
-        _fmt = _Formatters['Peripheral']
 
         def __init__(self, mnemonic, address, subblocks, fullname='', descr='', interrupts=None):
             super(Peripheral, self).__init__(mnemonic, address, subblocks,
@@ -100,7 +79,6 @@ def Peripheral(mnemonic, address, subblocks, fullname='', descr=''):
 def Register(mnemonic, address, subblocks, resetValue, resetMask, fullname='', descr=''):
     class Register(blocks.DescriptorMixin, blocks.MemoryMappedBlock):
         _dynamic = True
-        _fmt = _Formatters['Register']
 
         def __new__(cls, mnemonic, address, subblocks, resetValue, resetMask,
                      fullname='', descr=''):
@@ -124,7 +102,7 @@ def Register(mnemonic, address, subblocks, resetValue, resetMask, fullname='', d
 
 
 class BitField(blocks.DescriptorMixin, blocks.LeafBlock):
-    _fmt = _Formatters['BitField']
+    _fmt = "{name} ({mnemonic}, 0x{mask:08X})"
     _subfmt="0x{mask:08X} {mnemonic:s}"
 
     def __init__(self, mnemonic, mask, fullname='', descr=''):
@@ -150,17 +128,20 @@ class BitField(blocks.DescriptorMixin, blocks.LeafBlock):
                                                                 self.mask)
 
 class _FormatManager(dict):
-    def __init__(self, formatters, *classes):
-        super(_FormatManager, self).__init__(**{cls.__name__: cls for cls in classes})
-        self._formatters = formatters
+    def __init__(self, formatters):
+        super(_FormatManager, self).__init__(**{cls.__name__.lower(): bscls._fmt for cls, bscls in formatters.items()})
+        self._formatters = {cls.__name__.lower(): bscls for cls, bscls in formatters.items()}
 
     def __getitem__(self, i):
-        return self._formatters[i]
+        return super(_FormatManager, self).__getitem__(i.lower())
 
     def __setitem__(self, i, y):
-        cls = super(_FormatManager, self).__getitem__(i)
-        if not cls in (Peripheral, Register):
-            setattr(cls, '_fmt', y)
-        self._formatters[i] = y
+        cls = self._formatters[i.lower()]
+        cls._fmt = y
+        super(_FormatManager, self).__setitem__(i.lower(), y)
 
-Formatters = _FormatManager(_Formatters, Device, Peripheral, Register, BitField)
+
+formatters = _FormatManager({ Device: Device,
+                              Peripheral: blocks.MemoryMappedBlock,
+                              Register: blocks.MemoryMappedBlock,
+                              BitField: BitField })

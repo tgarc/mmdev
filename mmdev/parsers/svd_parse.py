@@ -77,9 +77,9 @@ class SVDParser(DeviceParser):
 
     @classmethod
     def parse_bitfield(cls, bitnode):
-        enumerated_values = []
-        for enumerated_value_node in bitnode.findall("./enumeratedValues/enumeratedValue"):
-            enumerated_values.append(self._parse_enumerated_value(enumerated_value_node))
+        # enumerated_values = []
+        # for enumerated_value_node in bitnode.findall("./enumeratedValues/enumeratedValue"):
+        #     enumerated_values.append(cls._parse_enumerated_value(enumerated_value_node))
 			
         bit_range=bitnode.findtext('bitRange')
         bit_offset=_readint(bitnode, 'bitOffset')
