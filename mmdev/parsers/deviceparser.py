@@ -1,3 +1,6 @@
+class ParseException(Exception):
+    pass
+
 class DeviceParser(object):
     def __new__(cls, devfile):
         return cls.parse_device(devfile)
