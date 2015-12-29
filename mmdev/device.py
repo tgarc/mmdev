@@ -38,12 +38,13 @@ class Device(blocks.Block):
         for blk in self.walk(3, l=0):
             blk._sort(key=lambda blk: blk.address)
 
+            
     def set_format(self, blocktype, fmt):
         for blk in self.walk(d=1, l=_levels[blocktype.lower()]):
             blk._fmt = fmt
 
     def find(self, key):
-        return self._map.get(key.lower())
+        return tuple(self._map[key.lower()])
 
     def write(self, address, value):
         self._link.write(address, value)
