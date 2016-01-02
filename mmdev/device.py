@@ -16,8 +16,8 @@ _levels = {'device': 0,
 class CPU(blocks.LeafBlock):
     _attrs = blocks.Block._attrs + ['revision', 'endian', 'mpuPresent', 'fpuPresent', 'vtorPresent', 'nvicPrioBits']
 
-    def __init__(self, mnemonic, revision, endian, mpuPresent, fpuPresent, nvicPrioBits, vtorPresent=True):
-        super(CPU, self).__init__(mnemonic)
+    def __init__(self, mnemonic, revision, endian, mpuPresent, fpuPresent, nvicPrioBits, vtorPresent=True, kwattrs={}):
+        super(CPU, self).__init__(mnemonic, kwattrs=kwattrs)
         self._revision = revision
         self._endian = endian
         self._mpuPresent = mpuPresent
@@ -30,8 +30,8 @@ class Device(blocks.Block):
     _fmt = "{name} ({mnemonic}, {vendor})"
     _attrs = blocks.Block._attrs + ['vendor']
 
-    def __init__(self, mnemonic, blocks, cpu=None, fullname='', descr='', width=32, addressbits=8, vendor='Unknown Vendor'):
-        super(Device, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr)
+    def __init__(self, mnemonic, blocks, cpu=None, fullname='', descr='', width=32, addressbits=8, vendor='Unknown Vendor', kwattrs={}):
+        super(Device, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr, kwattrs=kwattrs)
         self._link = link.Link()
 
         self.cpu = cpu
@@ -57,8 +57,9 @@ class Device(blocks.Block):
         for blk in self.walk(d=1, l=_levels[blocktype]):
             blk._fmt = fmt
 
-    def find(self, key):
-        return tuple(self._map[key])
+    def findall(self, key):
+        res = self._map[key]
+        return tuple(res) if isinstance(res, list) else (res,)
 
     def write(self, address, value):
         self._link.write(address, value)
@@ -88,31 +89,31 @@ class Device(blocks.Block):
         return cls.from_devfile(devfile, 'svd')
     
 
-def Peripheral(mnemonic, address, subblocks, fullname='', descr=''):
+def Peripheral(mnemonic, address, subblocks, fullname='', descr='', kwattrs={}):
     class Peripheral(blocks.MemoryMappedBlock):
         _dynamic = True
 
-        def __init__(self, mnemonic, address, subblocks, fullname='', descr='', interrupts=None):
+        def __init__(self, mnemonic, address, subblocks, fullname='', descr='', interrupts=None, kwattrs={}):
             super(Peripheral, self).__init__(mnemonic, address, subblocks,
                                              fullname=fullname, descr=descr)
             self.interrupts = interrupts
 
-    return Peripheral(mnemonic, address, subblocks, fullname=fullname, descr=descr)
+    return Peripheral(mnemonic, address, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
 
-def Register(mnemonic, address, subblocks, resetValue, resetMask, fullname='', descr=''):
+def Register(mnemonic, address, subblocks, resetValue, resetMask, fullname='', descr='', kwattrs={}):
     class Register(blocks.DescriptorMixin, blocks.MemoryMappedBlock):
         _dynamic = True
         _attrs = blocks.MemoryMappedBlock._attrs + ['resetValue', 'resetMask']
 
         def __new__(cls, mnemonic, address, subblocks, resetValue, resetMask,
-                     fullname='', descr=''):
+                     fullname='', descr='', kwattrs={}):
             return super(Register, cls).__new__(cls, mnemonic, address, subblocks,
-                                                fullname=fullname, descr=descr)
+                                                fullname=fullname, descr=descr, kwattrs=kwattrs)
 
         def __init__(self, mnemonic, address, subblocks, resetValue, resetMask,
-                     fullname='', descr=''):
-            super(Register, self).__init__(mnemonic, address, subblocks, fullname=fullname, descr=descr)
+                     fullname='', descr='', kwattrs={}):
+            super(Register, self).__init__(mnemonic, address, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs)
             self._resetValue = utils.HexValue(resetValue)
             self._resetMask = utils.HexValue(resetMask)
             
@@ -122,21 +123,28 @@ def Register(mnemonic, address, subblocks, resetValue, resetMask, fullname='', d
         def _write(self, value):
             return self.root.write(self._address, value)
 
-    return Register(mnemonic, address, subblocks, resetValue, resetMask, fullname=fullname, descr=descr)
+    return Register(mnemonic, address, subblocks, resetValue, resetMask, fullname=fullname, descr=descr, kwattrs={})
 
 
-class BitField(blocks.DescriptorMixin, blocks.LeafBlock):
+class BitField(blocks.DescriptorMixin, blocks.Block):
     _fmt = "{name} ({mnemonic}, 0x{mask:08X})"
     _subfmt="0x{mask:08X} {mnemonic:s}"
-    _attrs = blocks.LeafBlock._attrs + ['mask', 'address']
+    _attrs = blocks.Block._attrs + ['mask', 'address']
 
-    def __init__(self, mnemonic, mask, fullname='', descr=''):
+    def __new__(cls, mnemonic, mask, values=[], fullname='', descr='', kwattrs={}):
+        return super(BitField, cls).__new__(cls, mnemonic, values, fullname=fullname, descr=descr, kwattrs=kwattrs)
+
+    def __init__(self, mnemonic, mask, values=[], fullname='', descr='', kwattrs={}):
         # calculate the bit offset from the mask using a debruijn hash function
         # use ctypes to truncate the result to a uint32
         # TODO: change to a 64 bit version of the lookup
-        super(BitField, self).__init__(mnemonic, fullname=fullname, descr=descr)
+        super(BitField, self).__init__(mnemonic, [], fullname=fullname, descr=descr, kwattrs=kwattrs)
         self._mask = utils.HexValue(mask)
         self._address = utils.HexValue(_bruijn32lookup[ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27])
+
+        self._nodes = values
+        for blk in self._nodes:
+            blk.root = blk.parent = self
 
     def _read(self):
         return (self.parent.value & self._mask) >> self._address
@@ -150,3 +158,20 @@ class BitField(blocks.DescriptorMixin, blocks.LeafBlock):
                                                                 self.parent._typename,
                                                                 self.parent._mnemonic, 
                                                                 self._mask)
+
+class EnumeratedValue(blocks.LeafBlock):
+    _fmt = "{mnemonic} (value={value}): {description}"
+    _attrs = blocks.LeafBlock._attrs + ['value']
+
+    def __init__(self, mnemonic, value, fullname='', descr='', kwattrs={}):
+        # calculate the bit offset from the mask using a debruijn hash function
+        # use ctypes to truncate the result to a uint32
+        # TODO: change to a 64 bit version of the lookup
+        super(EnumeratedValue, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
+        self._value = value
+
+    def __repr__(self):
+        return "<{:s} '{:s}' in {:s} '{:s}'>".format(self._typename,
+                                                     self._mnemonic,
+                                                     self.parent._typename,
+                                                     self.parent._mnemonic)
