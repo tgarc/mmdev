@@ -1,5 +1,39 @@
 # mmdev
-futzing around with representing a DUT as a memory mapped device
+futzing around with representing a DUT as an SVD-like device tree
+
+
+# Purpose
+
+There's two roles I wanted ``mmdev`` to fill when I started this project:
+
+1. To serve as an exploratory tool and a reference
+
+``mmdev`` should make it easy to 'poke around' and get familiar with the
+features and functionality of a microcontroller from a programmers
+perspective. Methods like ``find()``, ``ls()``, and ``tree()`` gives the user
+the ability to quickly search and scan through a device without having to scour
+a technical reference manual.
+
+2. To serve as a tool for testing and verification
+
+By adding device read and write capability to the functionality provided by (1),
+``mmdev`` can provide an environment which allows the user to write test
+routines in Python in a highly concise and readable format. SWD read/write
+support will be added first since initial development is focused on ARM Cortex-M
+products.
+
+I would also like to eventually get ``mmdev`` to fill a third role:
+
+3. To serve as a SVD device file generator/converter
+
+My hope is that I can reduce the work it takes vendors to generate an SVD file
+from their own proprietary format by writing a mmdev.device-to-SVD dumper. Then,
+for vendors to generate an SVD file for their device, they would only need to
+write their own ``mmdev`` parser. By reducing the workload for vendors, I hope
+that it will encourage them to support a standardized public-use format (SVD
+being the only one around) that would in turn incite the development of freely
+available open source tools.
+
 
 # Tutorial
 
