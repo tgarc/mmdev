@@ -32,8 +32,11 @@ class LeafBlock(object):
     @property
     def attrs(self):
         attrs= { fn: getattr(self, '_'+fn) for fn in self._attrs }
-        attrs.update(self._kwattrs)
+        attrs['extra'] = self._kwattrs
         return attrs
+
+    def to_dict(self):
+        return { self._mnemonic: self.attrs }
 
     def _tree(self, *args, **kwargs):
         return self._fmt.format(**self.attrs)
@@ -138,6 +141,16 @@ class Block(LeafBlock):
 
     def _sort(self, key=None, reverse=True):
         self._nodes.sort(key=key, reverse=reverse)
+
+    def to_dict(self):
+        blkdict = self.attrs
+        del blkdict['extra']
+        for blk in self.itervalues():
+            key = blk._typename.lower()+'s'
+            if key not in blkdict:
+                blkdict[key] = {}
+            blkdict[key].update(blk.to_dict())
+        return { self._mnemonic: blkdict }
 
     def walk(self, d=-1, l=1):
         n = 1
