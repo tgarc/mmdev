@@ -2,19 +2,21 @@ import mmdev.utils as utils
 import logging
 import re
 
+_bracketregex = re.compile('[\[\]]')
 
 class LeafBlock(object):
     _fmt="{name:s} ({mnemonic:s})"
     _subfmt="{typename:s} {mnemonic:s}"
     _attrs = ['mnemonic', 'name', 'description', 'typename']
     
-    def __init__(self, mnemonic, fullname='', descr='', kwattrs={}):
+    def __init__(self, mnemonic, fullname=None, descr='', kwattrs={}):
         self._mnemonic = mnemonic
-        self._name = fullname
+        self._name = fullname or mnemonic
         self._description = descr
         self.parent = None # parent is None until attached to another block
         self.root = self
-        self.kwattrs = kwattrs
+        
+        self._kwattrs = kwattrs
 
         if self.__class__._subfmt == LeafBlock._subfmt:
             self.__class__._subfmt = self.__class__._fmt            
@@ -29,12 +31,11 @@ class LeafBlock(object):
 
     @property
     def attrs(self):
-        return { fn: getattr(self, '_'+fn) for fn in self._attrs }
+        attrs= { fn: getattr(self, '_'+fn) for fn in self._attrs }
+        attrs.update(self._kwattrs)
+        return attrs
 
     def _tree(self, *args, **kwargs):
-        return self._fmt.format(**self.attrs)
-
-    def _ls(self):
         return self._fmt.format(**self.attrs)
 
     def __repr__(self):
@@ -86,12 +87,12 @@ class DescriptorMixin(object):
 class Block(LeafBlock):
     _dynamic = False
 
-    def __new__(cls, mnemonic, subblocks, fullname='', descr='', kwattrs={}, **kwargs):
+    def __new__(cls, mnemonic, subblocks, fullname=None, descr='', kwattrs={}, **kwargs):
         newblk = super(Block, cls).__new__(cls, mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
         mblk = cls if cls._dynamic else newblk
         for blk in subblocks:
-            if re.search('[\[\]\(\)]', blk._mnemonic):
+            if _bracketregex.search(blk._mnemonic):
                 logging.warning("%s '%s' in %s '%s' is not a legal attribute name. Will not be added to attributes."
                                 % (blk.__class__.__name__, blk._mnemonic, cls.__name__, mnemonic))
                 continue
@@ -107,7 +108,7 @@ class Block(LeafBlock):
 
         return newblk
 
-    def __init__(self, mnemonic, subblocks, fullname='', descr='', kwattrs={}, **kwargs):
+    def __init__(self, mnemonic, subblocks, fullname=None, descr='', kwattrs={}, **kwargs):
         super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
         self._nodes = subblocks
@@ -172,18 +173,13 @@ class Block(LeafBlock):
 
         return treestr
 
-    @property
-    def tree(self, d=2):
-        print self._tree(d=d)
+    def tree(self, depth=2):
+        print self._tree(d=depth)
 
-    def _ls(self):
+    def ls(self):
         headerstr = self._fmt.format(**self.attrs)
         substr = "\n\t".join([blk._subfmt.format(**blk.attrs) for blk in self._nodes])
-        return headerstr + '\n\t' + substr if substr else headerstr
-
-    @property
-    def ls(self):
-        print self._ls()
+        print headerstr + '\n\t' + substr if substr else headerstr
 
     def __repr__(self):
         if self.parent is None:
@@ -199,7 +195,7 @@ class MemoryMappedBlock(Block):
     _subfmt="0x{address:08X} {mnemonic:s}"
     _attrs = Block._attrs + ['address']
 
-    def __new__(cls, mnemonic, address, subblocks, fullname='', descr='', kwattrs={}):
+    def __new__(cls, mnemonic, address, subblocks, fullname=None, descr='', kwattrs={}):
         return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, fullname=fullname, descr=descr, kwattrs={})
 
     def __init__(self, mnemonic, address, subblocks, fullname='', descr='', kwattrs={}):

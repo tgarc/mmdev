@@ -14,23 +14,21 @@ _levels = {'device': 0,
 
 
 class CPU(blocks.LeafBlock):
-    _attrs = blocks.Block._attrs + ['revision', 'endian', 'mpuPresent', 'fpuPresent', 'vtorPresent', 'nvicPrioBits']
+    _attrs = blocks.LeafBlock._attrs + ['revision', 'endian', 'mpuPresent', 'fpuPresent']
 
-    def __init__(self, mnemonic, revision, endian, mpuPresent, fpuPresent, nvicPrioBits, vtorPresent=True, kwattrs={}):
+    def __init__(self, mnemonic, revision, endian, mpuPresent, fpuPresent, kwattrs={}):
         super(CPU, self).__init__(mnemonic, kwattrs=kwattrs)
         self._revision = revision
         self._endian = endian
         self._mpuPresent = mpuPresent
         self._fpuPresent = fpuPresent
-        self._vtorPresent = vtorPresent
-        self._nvicPrioBits = nvicPrioBits
 
 
 class Device(blocks.Block):
     _fmt = "{name} ({mnemonic}, {vendor})"
     _attrs = blocks.Block._attrs + ['vendor']
 
-    def __init__(self, mnemonic, blocks, cpu=None, fullname='', descr='', width=32, addressbits=8, vendor='Unknown Vendor', kwattrs={}):
+    def __init__(self, mnemonic, blocks, cpu=None, fullname=None, descr='', width=32, addressbits=8, vendor='Unknown Vendor', kwattrs={}):
         super(Device, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr, kwattrs=kwattrs)
         self._link = link.Link()
 
@@ -57,8 +55,16 @@ class Device(blocks.Block):
         for blk in self.walk(d=1, l=_levels[blocktype]):
             blk._fmt = fmt
 
+    def find(self, key):
+        res = self.findall(key)
+        if len(res):
+            return res[0]
+        return res
+
     def findall(self, key):
-        res = self._map[key]
+        res = self._map.get(key)
+        if res is None:
+            return ()
         return tuple(res) if isinstance(res, list) else (res,)
 
     def write(self, address, value):
@@ -68,51 +74,50 @@ class Device(blocks.Block):
         return utils.HexValue(self._link.read(address), self.root._width)
 
     @staticmethod
-    def from_devfile(devfile, file_format):
+    def from_devfile(devfile, file_format, raiseErr=True):
         """
         Parse a device file using the given file format
         """
         from mmdev import parsers
         parse = parsers.PARSERS[file_format]
-        return parse(devfile)
+        return parse(devfile, raiseErr=raiseErr)
+
+    # @classmethod
+    # def from_json(cls, devfile):
+    #     return cls.from_devfile(devfile, 'json')
+
+    # @classmethod
+    # def from_pycfg(cls, devfile):
+    #     return cls.from_devfile(devfile, 'pycfg')
 
     @classmethod
-    def from_json(cls, devfile):
-        return cls.from_devfile(devfile, 'json')
-
-    @classmethod
-    def from_pycfg(cls, devfile):
-        return cls.from_devfile(devfile, 'pycfg')
-
-    @classmethod
-    def from_svd(cls, devfile):
-        return cls.from_devfile(devfile, 'svd')
+    def from_svd(cls, devfile, **kwargs):
+        return cls.from_devfile(devfile, 'svd', **kwargs)
     
 
-def Peripheral(mnemonic, address, subblocks, fullname='', descr='', kwattrs={}):
+def Peripheral(mnemonic, address, subblocks, fullname=None, descr='', kwattrs={}):
     class Peripheral(blocks.MemoryMappedBlock):
         _dynamic = True
 
-        def __init__(self, mnemonic, address, subblocks, fullname='', descr='', interrupts=None, kwattrs={}):
+        def __init__(self, mnemonic, address, subblocks, fullname=None, descr='', kwattrs={}):
             super(Peripheral, self).__init__(mnemonic, address, subblocks,
                                              fullname=fullname, descr=descr)
-            self.interrupts = interrupts
 
     return Peripheral(mnemonic, address, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
 
-def Register(mnemonic, address, subblocks, resetValue, resetMask, fullname='', descr='', kwattrs={}):
+def Register(mnemonic, address, subblocks, resetValue, resetMask, fullname=None, descr='', kwattrs={}):
     class Register(blocks.DescriptorMixin, blocks.MemoryMappedBlock):
         _dynamic = True
         _attrs = blocks.MemoryMappedBlock._attrs + ['resetValue', 'resetMask']
 
         def __new__(cls, mnemonic, address, subblocks, resetValue, resetMask,
-                     fullname='', descr='', kwattrs={}):
+                     fullname=None, descr='', kwattrs={}):
             return super(Register, cls).__new__(cls, mnemonic, address, subblocks,
                                                 fullname=fullname, descr=descr, kwattrs=kwattrs)
 
         def __init__(self, mnemonic, address, subblocks, resetValue, resetMask,
-                     fullname='', descr='', kwattrs={}):
+                     fullname=None, descr='', kwattrs={}):
             super(Register, self).__init__(mnemonic, address, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs)
             self._resetValue = utils.HexValue(resetValue)
             self._resetMask = utils.HexValue(resetMask)
@@ -131,10 +136,10 @@ class BitField(blocks.DescriptorMixin, blocks.Block):
     _subfmt="0x{mask:08X} {mnemonic:s}"
     _attrs = blocks.Block._attrs + ['mask', 'address']
 
-    def __new__(cls, mnemonic, mask, values=[], fullname='', descr='', kwattrs={}):
-        return super(BitField, cls).__new__(cls, mnemonic, values, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    def __new__(cls, mnemonic, mask, values=[], fullname=None, descr='', kwattrs={}):
+        return super(BitField, cls).__new__(cls, mnemonic, [], fullname=fullname, descr=descr, kwattrs=kwattrs)
 
-    def __init__(self, mnemonic, mask, values=[], fullname='', descr='', kwattrs={}):
+    def __init__(self, mnemonic, mask, values=[], fullname=None, descr='', kwattrs={}):
         # calculate the bit offset from the mask using a debruijn hash function
         # use ctypes to truncate the result to a uint32
         # TODO: change to a 64 bit version of the lookup
@@ -163,7 +168,7 @@ class EnumeratedValue(blocks.LeafBlock):
     _fmt = "{mnemonic} (value={value}): {description}"
     _attrs = blocks.LeafBlock._attrs + ['value']
 
-    def __init__(self, mnemonic, value, fullname='', descr='', kwattrs={}):
+    def __init__(self, mnemonic, value, fullname=None, descr='', kwattrs={}):
         # calculate the bit offset from the mask using a debruijn hash function
         # use ctypes to truncate the result to a uint32
         # TODO: change to a 64 bit version of the lookup
