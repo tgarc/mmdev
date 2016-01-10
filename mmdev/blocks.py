@@ -18,9 +18,6 @@ class LeafBlock(object):
         
         self._kwattrs = kwattrs
 
-        if self.__class__._subfmt == LeafBlock._subfmt:
-            self.__class__._subfmt = self.__class__._fmt            
-
         if descr:
             self._description = ' '.join(l.strip() for l in descr.split('\n'))
             self.__doc__ = self._description
@@ -120,6 +117,12 @@ class Block(LeafBlock):
         
         for blk in self.walk(l=2):
             blk.root = self
+
+    def __len__(self):
+        return len(self._nodes)
+
+    def __iter__(self):
+        return iter(self._nodes)
 
     def iterkeys(self):
         return iter(blk._mnemonic for blk in self._nodes)

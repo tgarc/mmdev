@@ -2,7 +2,6 @@ from xml.etree import ElementTree
 from mmdev.parsers.deviceparser import DeviceParser, ParseException, RequiredValueError
 from mmdev.device import CPU, Device, Peripheral, Register, BitField, EnumeratedValue
 import re
-import collections
 import logging
 
 

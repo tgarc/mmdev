@@ -1,5 +1,5 @@
-import collections
 import json
+
 
 class HexValue(int):
     def __new__(cls, x, bitwidth=0, base=None):
@@ -23,16 +23,16 @@ def to_gdbinit(dev):
     blkfmt = "set $%s = (unsigned long *) 0x%08x"
     bitfmt = "set $%s = (unsigned long) 0x%08x"    
     for blkname, blk in dev.iteritems():
-        print >> fh, '#', blkname, blk.name
+        print >> fh, '#', blkname, blk.attrs['name']
         print >> fh, '#', '='*58
-        print >> fh, blkfmt % (blkname.lower(), blk.address)
+        print >> fh, blkfmt % (blkname.lower(), blk.attrs['address'])
         print >> fh
         for regname, reg in blk.iteritems():
-            print >> fh, '#', regname.lower(), reg.name.lower()
-            print >> fh, '#', '-'*(len(regname)+len(reg.name)+1)
-            print >> fh, blkfmt % (regname.lower(),reg.address)
+            print >> fh, '#', regname.lower(), reg.attrs['name'].lower()
+            print >> fh, '#', '-'*(len(regname)+len(reg.attrs['name'])+1)
+            print >> fh, blkfmt % (regname.lower(),reg.attrs['address'])
             for bfname, bits in reg.iteritems():
-                print >> fh, bitfmt % (bfname.lower(), bits.mask)
+                print >> fh, bitfmt % (bfname.lower(), bits.attrs['mask'])
             print >> fh
     gdbinit = fh.getvalue()
     fh.close()
