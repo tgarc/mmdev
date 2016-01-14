@@ -117,7 +117,7 @@ class SVDParser(DeviceParser):
 
     @classmethod
     def parse_peripheral(cls, pphnode, parent={}, size=None, access=None,
-                         protection=None, resetValue=None, resetMask=None):
+                         protection=None, resetValue=None, resetMask=0):
         name = _readtxt(pphnode, 'name', parent=parent, required=True)
         pphaddr = _readint(pphnode, 'baseAddress', parent=parent, required=True)
         descr = _readtxt(pphnode,'description', parent=parent) 
@@ -135,7 +135,7 @@ class SVDParser(DeviceParser):
     @classmethod
     def parse_register(cls, regnode, baseaddr, parent={}, size=None,
                        access=None, protection=None, resetValue=None,
-                       resetMask=None):
+                       resetMask=0):
         # These are required even when inheriting from another register
         name       = _readtxt(regnode, 'name', required=True)
         addr       = _readint(regnode, 'addressOffset', required=True) + baseaddr
@@ -144,16 +144,18 @@ class SVDParser(DeviceParser):
         # size       = _readint(regnode, 'size', size, required=True)
         # access     = _readtxt(regnode, 'access', access)
         # protection = _readtxt(regnode, 'protection', protection)
-        resetvalue = _readint(regnode, 'resetValue', resetValue, parent=parent, required=True)
-        resetmask  = _readint(regnode, 'resetMask', resetMask, parent=parent, required=True)
+        resetmask = _readint(regnode, 'resetMask', resetMask, parent=parent)
+        resetvalue = _readint(regnode, 'resetValue', resetValue, 
+                              parent=parent, required=resetmask != 0)
 
         dispname   = _readtxt(regnode, 'displayName', 'Register', parent=parent)
         bits = cls.parse_subblocks(regnode.pop('fields', parent.get('fields', [])), cls.parse_bitfield, access=access)
 
         dim = _readint(regnode, 'dim', parent=parent)
         if dim is None:
-            return Register(name, addr, bits, resetvalue, resetmask,
-                            fullname=dispname, descr=descr, kwattrs=regnode)
+            return Register(name, addr, bits, resetMask=resetmask,
+                            resetValue=resetvalue, fullname=dispname,
+                            descr=descr, kwattrs=regnode)
 
         diminc = _readint(regnode, 'dimIncrement', parent=parent, required=True)
         dimidx = _readtxt(regnode, 'dimIndex', parent=parent)
@@ -170,8 +172,8 @@ class SVDParser(DeviceParser):
             regblk.append(Register(name % idx,
                                    addr + i*diminc,
                                    bits,
-                                   resetvalue,
-                                   resetmask, 
+                                   resetMask=resetmask, 
+                                   resetValue=resetvalue,
                                    fullname=dispname % idx if '%s' in dispname else dispname,
                                    descr=descr,
                                    kwattrs=regnode))

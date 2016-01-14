@@ -99,36 +99,39 @@ def Peripheral(mnemonic, address, subblocks, fullname=None, descr='', kwattrs={}
     class Peripheral(blocks.MemoryMappedBlock):
         _dynamic = True
 
-        def __init__(self, mnemonic, address, subblocks, fullname=None, descr='', kwattrs={}):
+        def __init__(self, mnemonic, address, subblocks, fullname, descr, kwattrs):
             super(Peripheral, self).__init__(mnemonic, address, subblocks,
                                              fullname=fullname, descr=descr)
 
-    return Peripheral(mnemonic, address, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    return Peripheral(mnemonic, address, subblocks, fullname, descr, kwattrs)
 
 
-def Register(mnemonic, address, subblocks, resetValue, resetMask, fullname=None, descr='', kwattrs={}):
+def Register(mnemonic, address, subblocks, resetMask=0, resetValue=None, fullname=None, descr='', kwattrs={}):
     class Register(blocks.DescriptorMixin, blocks.MemoryMappedBlock):
         _dynamic = True
         _attrs = blocks.MemoryMappedBlock._attrs + ['resetValue', 'resetMask']
 
-        def __new__(cls, mnemonic, address, subblocks, resetValue, resetMask,
-                     fullname=None, descr='', kwattrs={}):
+        def __new__(cls, mnemonic, address, subblocks, resetMask, resetValue,
+                    fullname, descr, kwattrs):
             return super(Register, cls).__new__(cls, mnemonic, address, subblocks,
                                                 fullname=fullname, descr=descr, kwattrs=kwattrs)
 
-        def __init__(self, mnemonic, address, subblocks, resetValue, resetMask,
-                     fullname=None, descr='', kwattrs={}):
-            super(Register, self).__init__(mnemonic, address, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs)
+        def __init__(self, mnemonic, address, subblocks, resetMask, resetValue, 
+                     fullname, descr, kwattrs):
+            super(Register, self).__init__(mnemonic, address, subblocks, 
+                                           fullname=fullname, descr=descr, kwattrs=kwattrs)
+            if resetMask == 0:
+                resetValue = 0
             self._resetValue = utils.HexValue(resetValue)
             self._resetMask = utils.HexValue(resetMask)
-            
+                        
         def _read(self):
             return self.root.read(self._address)
 
         def _write(self, value):
             return self.root.write(self._address, value)
 
-    return Register(mnemonic, address, subblocks, resetValue, resetMask, fullname=fullname, descr=descr, kwattrs={})
+    return Register(mnemonic, address, subblocks, resetMask, resetValue, fullname, descr, kwattrs)
 
 
 class BitField(blocks.DescriptorMixin, blocks.Block):
