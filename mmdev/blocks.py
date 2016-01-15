@@ -1,35 +1,45 @@
-from utils import HexValue
+import mmdev.utils as utils
+import logging
+import re
 
+_bracketregex = re.compile('[\[\]]')
 
 class LeafBlock(object):
     _fmt="{name:s} ({mnemonic:s})"
     _subfmt="{typename:s} {mnemonic:s}"
+    _attrs = ['mnemonic', 'name', 'description', 'typename']
     
-    def __init__(self, mnemonic, fullname='', descr=''):
-        self.mnemonic = mnemonic
-        self.name = fullname
-        self.description = descr
-        self.typename = self.__class__.__name__
+    def __init__(self, mnemonic, fullname=None, descr='', kwattrs={}):
+        self._mnemonic = mnemonic
+        self._name = fullname or mnemonic
+        self._description = descr
         self.parent = None # parent is None until attached to another block
         self.root = self
-        self._fields = ['mnemonic', 'name', 'description', 'typename']
+        
+        self._kwattrs = kwattrs
 
         if descr:
-            self.description = ' '.join(l.strip() for l in descr.split('\n'))
-            self.__doc__ = self.description
+            self._description = ' '.join(l.strip() for l in descr.split('\n'))
+            self.__doc__ = self._description
+
+    @property
+    def _typename(self):
+        return self.__class__.__name__
 
     @property
     def attrs(self):
-        return { fn: getattr(self, fn) for fn in self._fields }
+        attrs= { fn: getattr(self, '_'+fn) for fn in self._attrs }
+        attrs['extra'] = self._kwattrs
+        return attrs
+
+    def to_dict(self):
+        return { self._mnemonic: self.attrs }
 
     def _tree(self, *args, **kwargs):
         return self._fmt.format(**self.attrs)
 
-    def _ls(self):
-        return self._fmt.format(**self.attrs)
-
     def __repr__(self):
-        return "<{:s} '{:s}'>".format(self.typename, self.mnemonic)
+        return "<{:s} '{:s}'>".format(self._typename, self._mnemonic)
 
 
 class DescriptorMixin(object):
@@ -41,7 +51,7 @@ class DescriptorMixin(object):
 
     @property
     def value(self):
-        return HexValue(self._read(), self.root._width)
+        return utils.HexValue(self._read(), self.root._width)
 
     @value.setter
     def value(self, value):
@@ -77,24 +87,29 @@ class DescriptorMixin(object):
 class Block(LeafBlock):
     _dynamic = False
 
-    def __new__(cls, mnemonic, subblocks, fullname='', descr='', **kwargs):
-        newblk = super(Block, cls).__new__(cls, mnemonic, fullname=fullname, descr=descr)
+    def __new__(cls, mnemonic, subblocks, fullname=None, descr='', kwattrs={}, **kwargs):
+        newblk = super(Block, cls).__new__(cls, mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
         mblk = cls if cls._dynamic else newblk
         for blk in subblocks:
+            if _bracketregex.search(blk._mnemonic):
+                logging.warning("%s '%s' in %s '%s' is not a legal attribute name. Will not be added to attributes."
+                                % (blk.__class__.__name__, blk._mnemonic, cls.__name__, mnemonic))
+                continue
+
             try:
-                getattr(mblk, blk.mnemonic.lower())
+                getattr(mblk, blk._mnemonic)
             except AttributeError:
-                setattr(mblk, blk.mnemonic.lower(), blk)
+                setattr(mblk, blk._mnemonic, blk)
             else:
-                raise ValueError("Block '%s' would overwrite existing attribute "   \
-                                 "or subblock by the same name in %s '%s'"          \
-                                 % (blk.mnemonic, cls.__name__, mnemonic))
+                logging.warning("%s '%s' would overwrite existing attribute by the same name in "   \
+                                "%s '%s'. Will not be added to attributes."                         \
+                                % (blk.__class__.__name__, blk._mnemonic, cls.__name__, mnemonic))
 
         return newblk
 
-    def __init__(self, mnemonic, subblocks, fullname='', descr='', **kwargs):
-        super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr)
+    def __init__(self, mnemonic, subblocks, fullname=None, descr='', kwattrs={}, **kwargs):
+        super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
         self._nodes = subblocks
         for blk in self._nodes:
@@ -103,14 +118,20 @@ class Block(LeafBlock):
         for blk in self.walk(l=2):
             blk.root = self
 
+    def __len__(self):
+        return len(self._nodes)
+
+    def __iter__(self):
+        return iter(self._nodes)
+
     def iterkeys(self):
-        return iter(blk.mnemonic for blk in self._nodes)
+        return iter(blk._mnemonic for blk in self._nodes)
 
     def keys(self):
         return list(self.iterkeys())
 
     def iteritems(self):
-        return iter((blk.mnemonic, blk) for blk in self._nodes)
+        return iter((blk._mnemonic, blk) for blk in self._nodes)
 
     def items(self):
         return list(self.iteritems())
@@ -123,6 +144,16 @@ class Block(LeafBlock):
 
     def _sort(self, key=None, reverse=True):
         self._nodes.sort(key=key, reverse=reverse)
+
+    def to_dict(self):
+        blkdict = self.attrs
+        del blkdict['extra']
+        for blk in self.itervalues():
+            key = blk._typename.lower()+'s'
+            if key not in blkdict:
+                blkdict[key] = {}
+            blkdict[key].update(blk.to_dict())
+        return { self._mnemonic: blkdict }
 
     def walk(self, d=-1, l=1):
         n = 1
@@ -158,44 +189,38 @@ class Block(LeafBlock):
 
         return treestr
 
-    @property
-    def tree(self, d=2):
-        print self._tree(d=d)
+    def tree(self, depth=2):
+        print self._tree(d=depth)
 
-    def _ls(self):
+    def ls(self):
         headerstr = self._fmt.format(**self.attrs)
         substr = "\n\t".join([blk._subfmt.format(**blk.attrs) for blk in self._nodes])
-        return headerstr + '\n\t' + substr if substr else headerstr
-
-    @property
-    def ls(self):
-        print self._ls()
+        print headerstr + '\n\t' + substr if substr else headerstr
 
     def __repr__(self):
         if self.parent is None:
             return super(Block, self).__repr__()
-        return "<{:s} '{:s}' in {:s} '{:s}'>".format(self.typename,
-                                                     self.mnemonic,
-                                                     self.parent.typename,
-                                                     self.parent.mnemonic)
+        return "<{:s} '{:s}' in {:s} '{:s}'>".format(self._typename,
+                                                     self._mnemonic,
+                                                     self.parent._typename,
+                                                     self.parent._mnemonic)
 
 
 class MemoryMappedBlock(Block):
     _fmt="{name:s} ({mnemonic:s}, 0x{address:08X})"
     _subfmt="0x{address:08X} {mnemonic:s}"
+    _attrs = Block._attrs + ['address']
 
-    def __new__(cls, mnemonic, address, subblocks, fullname='', descr=''):
-        return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, fullname=fullname, descr=descr)
+    def __new__(cls, mnemonic, address, subblocks, fullname=None, descr='', kwattrs={}):
+        return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, fullname=fullname, descr=descr, kwattrs={})
 
-    def __init__(self, mnemonic, address, subblocks, fullname='', descr=''):
-        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr)
-
-        self.address = HexValue(address)
-        self._fields += ['address']
+    def __init__(self, mnemonic, address, subblocks, fullname='', descr='', kwattrs={}):
+        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr, kwattrs={})
+        self._address = utils.HexValue(address)
 
     def __repr__(self):
-        return "<{:s} '{:s}' in {:s} '{:s}' at 0x{:08x}>".format(self.typename, 
-                                                                 self.mnemonic, 
-                                                                 self.parent.typename, 
-                                                                 self.parent.mnemonic, 
-                                                                 self.address)
+        return "<{:s} '{:s}' in {:s} '{:s}' at 0x{:08x}>".format(self._typename, 
+                                                                 self._mnemonic, 
+                                                                 self.parent._typename, 
+                                                                 self.parent._mnemonic, 
+                                                                 self._address)
