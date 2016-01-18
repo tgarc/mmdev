@@ -85,28 +85,50 @@ class DescriptorMixin(object):
 
 
 class Block(LeafBlock):
-    _dynamic = False
+    _dynamicBinding = False
 
-    def __new__(cls, mnemonic, subblocks, fullname=None, descr='', kwattrs={}, **kwargs):
-        newblk = super(Block, cls).__new__(cls, mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    def __new__(cls, mnemonic, subblocks, fullname=None, descr='', kwattrs={},
+                bind=True, **kwargs):
+        if cls._dynamicBinding:
+            mblk = dict(cls.__dict__)
+        else:
+            mblk = super(Block, cls).__new__(cls, mnemonic, fullname=fullname,
+                                             descr=descr, kwattrs=kwattrs)
 
-        mblk = cls if cls._dynamic else newblk
+        if not cls._dynamicBinding and not bind:
+            return mblk
+
         for blk in subblocks:
             if _bracketregex.search(blk._mnemonic):
-                logging.warning("%s '%s' in %s '%s' is not a legal attribute name. Will not be added to attributes."
-                                % (blk.__class__.__name__, blk._mnemonic, cls.__name__, mnemonic))
+                logging.warning("%s '%s' in %s '%s' is not a legal attribute "
+                                "name. Will not be added to attributes."  %
+                                (blk.__class__.__name__, blk._mnemonic,
+                                 cls.__name__, mnemonic))
                 continue
 
             try:
-                getattr(mblk, blk._mnemonic)
-            except AttributeError:
-                setattr(mblk, blk._mnemonic, blk)
+                if cls._dynamicBinding:
+                    mblk[blk._mnemonic]
+                else:
+                    getattr(mblk, blk._mnemonic)
+            except (AttributeError, KeyError):
+                if cls._dynamicBinding:
+                    mblk[blk._mnemonic] = blk
+                else:
+                    setattr(mblk, blk._mnemonic, blk)
             else:
-                logging.warning("%s '%s' would overwrite existing attribute by the same name in "   \
-                                "%s '%s'. Will not be added to attributes."                         \
-                                % (blk.__class__.__name__, blk._mnemonic, cls.__name__, mnemonic))
+                logging.warning("%s '%s' would overwrite existing attribute by"
+                                "the same name in %s '%s'. Will not be added"
+                                "to attributes." % (blk.__class__.__name__,
+                                                    blk._mnemonic, cls.__name__,
+                                                    mnemonic))
 
-        return newblk
+        if cls._dynamicBinding:
+            newcls = type(cls.__name__, (cls,) + cls.__bases__, mblk)
+            return super(Block, newcls).__new__(newcls, mnemonic, fullname=fullname,
+                                                descr=descr, kwattrs=kwattrs)
+        else:
+            return mblk
 
     def __init__(self, mnemonic, subblocks, fullname=None, descr='', kwattrs={}, **kwargs):
         super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
