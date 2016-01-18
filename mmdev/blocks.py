@@ -5,8 +5,8 @@ import re
 _bracketregex = re.compile('[\[\]]')
 
 class LeafBlock(object):
-    _fmt="{name:s} ({mnemonic:s})"
-    _subfmt="{typename:s} {mnemonic:s}"
+    _fmt="{name} ({mnemonic})"
+    _subfmt="{typename} {mnemonic}"
     _attrs = ['mnemonic', 'name', 'description', 'typename']
     
     def __init__(self, mnemonic, fullname=None, descr='', kwattrs={}):
@@ -42,60 +42,18 @@ class LeafBlock(object):
         return "<{:s} '{:s}'>".format(self._typename, self._mnemonic)
 
 
-class DescriptorMixin(object):
-    def _read(self):
-        return
-
-    def _write(self, value):
-        return 
-
-    @property
-    def value(self):
-        return utils.HexValue(self._read(), self.root._width)
-
-    @value.setter
-    def value(self, value):
-        self._write(value)
-
-    def __set__(self, obj, value):
-        self.value = value
-
-    def __invert__(self):
-        return ~self.value
-    def __ilshift__(self, other):
-        return self.value << other
-    def __irshift__(self, other):
-        return self.value >> other
-    def __iand__(self, other):
-        return self.value & other
-    def __ixor__(self, other):
-        return self.value ^ other
-    def __ior__(self, other):
-        return self.value | other
-    def __lshift__(self, other):
-        return self.value << other
-    def __rshift__(self, other):
-        return self.value >> other
-    def __and__(self, other):
-        return self.value & other
-    def __xor__(self, other):
-        return self.value ^ other
-    def __or__(self, other):
-        return self.value | other
-
-
 class Block(LeafBlock):
     _dynamicBinding = False
 
     def __new__(cls, mnemonic, subblocks, fullname=None, descr='', kwattrs={},
                 bind=True, **kwargs):
-        if cls._dynamicBinding:
+        if cls._dynamicBinding and bind:
             mblk = dict(cls.__dict__)
         else:
             mblk = super(Block, cls).__new__(cls, mnemonic, fullname=fullname,
                                              descr=descr, kwattrs=kwattrs)
 
-        if not cls._dynamicBinding and not bind:
+        if not bind:
             return mblk
 
         for blk in subblocks:
@@ -117,8 +75,8 @@ class Block(LeafBlock):
                 else:
                     setattr(mblk, blk._mnemonic, blk)
             else:
-                logging.warning("%s '%s' would overwrite existing attribute by"
-                                "the same name in %s '%s'. Will not be added"
+                logging.warning("%s '%s' would overwrite existing attribute by "
+                                "the same name in %s '%s'. Will not be added "
                                 "to attributes." % (blk.__class__.__name__,
                                                     blk._mnemonic, cls.__name__,
                                                     mnemonic))
@@ -222,27 +180,73 @@ class Block(LeafBlock):
     def __repr__(self):
         if self.parent is None:
             return super(Block, self).__repr__()
-        return "<{:s} '{:s}' in {:s} '{:s}'>".format(self._typename,
+        return "<{:s} '{:s}' in {:s} '{}'>".format(self._typename,
                                                      self._mnemonic,
                                                      self.parent._typename,
                                                      self.parent._mnemonic)
 
 
 class MemoryMappedBlock(Block):
-    _fmt="{name:s} ({mnemonic:s}, 0x{address:08X})"
-    _subfmt="0x{address:08X} {mnemonic:s}"
+    _fmt="{name} ({mnemonic}, {address})"
+    _subfmt="{address} {mnemonic}"
     _attrs = Block._attrs + ['address']
 
-    def __new__(cls, mnemonic, address, subblocks, fullname=None, descr='', kwattrs={}):
-        return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, fullname=fullname, descr=descr, kwattrs={})
+    def __new__(cls, mnemonic, address, subblocks, fullname=None, descr='', kwattrs={}, bind=True):
+        return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=bind)
 
-    def __init__(self, mnemonic, address, subblocks, fullname='', descr='', kwattrs={}):
-        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr, kwattrs={})
+    def __init__(self, mnemonic, address, subblocks, fullname='', descr='', kwattrs={}, bind=True):
+        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=bind)
         self._address = utils.HexValue(address)
 
+    def _set_width(self, width):
+        self._address = utils.HexValue(self._address, width)
+
     def __repr__(self):
-        return "<{:s} '{:s}' in {:s} '{:s}' at 0x{:08x}>".format(self._typename, 
-                                                                 self._mnemonic, 
-                                                                 self.parent._typename, 
-                                                                 self.parent._mnemonic, 
-                                                                 self._address)
+        return "<{:s} '{:s}' in {:s} '{:s}' at {}>".format(self._typename, 
+                                                             self._mnemonic, 
+                                                             self.parent._typename, 
+                                                             self.parent._mnemonic, 
+                                                             self._address)
+
+
+class IOBlock(MemoryMappedBlock):
+    def _read(self):
+        return
+
+    def _write(self, value):
+        return 
+
+    @property
+    def value(self):
+        return utils.HexValue(self._read(), self._width)
+
+    @value.setter
+    def value(self, value):
+        self._write(value)
+
+    def __set__(self, obj, value):
+        self.value = value
+
+    def __invert__(self):
+        return ~self.value
+    def __ilshift__(self, other):
+        return self.value << other
+    def __irshift__(self, other):
+        return self.value >> other
+    def __iand__(self, other):
+        return self.value & other
+    def __ixor__(self, other):
+        return self.value ^ other
+    def __ior__(self, other):
+        return self.value | other
+    def __lshift__(self, other):
+        return self.value << other
+    def __rshift__(self, other):
+        return self.value >> other
+    def __and__(self, other):
+        return self.value & other
+    def __xor__(self, other):
+        return self.value ^ other
+    def __or__(self, other):
+        return self.value | other
+

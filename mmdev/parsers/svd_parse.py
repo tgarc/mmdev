@@ -85,7 +85,7 @@ class SVDParser(DeviceParser):
             width = _readint(devnode, 'width', required=True)
             vendor = _readtxt(devnode, 'vendor', '')
 
-            regopts = { # 'size'      :   _readint(devnode, 'size'),
+            regopts = { 'size'      :   _readint(devnode, 'size'),
                         # 'access'    :   _readtxt(devnode, 'access'),
                         # 'protection':   _readtxt(devnode, 'protection'),
                         'resetValue':   _readint(devnode, 'resetValue'),
@@ -112,8 +112,9 @@ class SVDParser(DeviceParser):
 
         pphs = cls.parse_subblocks(devnode.pop('peripherals'), cls.parse_peripheral, **regopts)
 
-        return Device(mnem, pphs, cpu=cpu, fullname=name, descr=descr, width=width,
-                      addressbits=addressUnitBits, vendor=vendor, kwattrs=devnode)
+        return Device(mnem, width, addressUnitBits, pphs, cpu=cpu,
+                      fullname=name, descr=descr, vendor=vendor,
+                      kwattrs=devnode)
 
     @classmethod
     def parse_peripheral(cls, pphnode, parent={}, size=None, access=None,
@@ -122,7 +123,7 @@ class SVDParser(DeviceParser):
         pphaddr = _readint(pphnode, 'baseAddress', parent=parent, required=True)
         descr = _readtxt(pphnode,'description', parent=parent) 
 
-        regopts = { # 'size': _readint(pphnode, 'size', parent.get('size', size)),
+        regopts = { 'size': _readint(pphnode, 'size', parent.get('size', size)),
                     # 'access': _readtxt(pphnode, 'access', parent.get('access', access)),
                     # 'protection': _readtxt(pphnode, 'protection', parent.get('protection', protection)),
                     'resetValue': _readint(pphnode, 'resetValue', resetValue, parent=parent),
@@ -141,7 +142,7 @@ class SVDParser(DeviceParser):
         addr       = _readint(regnode, 'addressOffset', required=True) + baseaddr
         descr      = _readtxt(regnode, 'description', required=True)
 
-        # size       = _readint(regnode, 'size', size, required=True)
+        size       = _readint(regnode, 'size', size, required=True)
         # access     = _readtxt(regnode, 'access', access)
         # protection = _readtxt(regnode, 'protection', protection)
         resetmask = _readint(regnode, 'resetMask', resetMask, parent=parent)
@@ -153,7 +154,7 @@ class SVDParser(DeviceParser):
 
         dim = _readint(regnode, 'dim', parent=parent)
         if dim is None:
-            return Register(name, addr, bits, resetMask=resetmask,
+            return Register(name, size, addr, bits, resetMask=resetmask,
                             resetValue=resetvalue, fullname=dispname,
                             descr=descr, kwattrs=regnode)
 
@@ -170,6 +171,7 @@ class SVDParser(DeviceParser):
         regblk = []
         for i, idx in enumerate(dimidx):
             regblk.append(Register(name % idx,
+                                   size,
                                    addr + i*diminc,
                                    bits,
                                    resetMask=resetmask, 
@@ -216,7 +218,7 @@ class SVDParser(DeviceParser):
 
         enumvals = cls.parse_subblocks(enumvals, cls.parse_enumerated_value)
 
-        return BitField(name, bit_width << bit_offset, enumvals, descr=descr, kwattrs=bitnode)
+        return BitField(name, bit_width, bit_offset, values=enumvals, descr=descr, kwattrs=bitnode)
 
     @classmethod
     def parse_enumerated_value(cls, enumnode, parent={}):
