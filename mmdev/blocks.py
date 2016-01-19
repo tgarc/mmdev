@@ -1,4 +1,4 @@
-import mmdev.utils as utils
+from mmdev import utils
 import logging
 import re
 
@@ -249,4 +249,3 @@ class IOBlock(MemoryMappedBlock):
         return self.value ^ other
     def __or__(self, other):
         return self.value | other
-
