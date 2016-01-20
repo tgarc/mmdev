@@ -29,6 +29,13 @@ class LeafBlock(object):
     def _typename(self):
         return self.__class__.__name__
 
+    def __lt__(self, other):
+        return self._key < other._key
+
+    @property
+    def _key(self):
+        return self._mnemonic
+
     @property
     def attrs(self):
         attrs= { fn: getattr(self, '_'+fn) for fn in self._attrs }
@@ -37,9 +44,6 @@ class LeafBlock(object):
 
     def to_dict(self):
         return { self._mnemonic: self.attrs }
-
-    def _set_width(self, *args, **kwargs):
-        return
 
     def _tree(self, *args, **kwargs):
         return self._fmt.format(**self.attrs)
@@ -108,8 +112,7 @@ class Block(LeafBlock):
         for blk in self.walk(l=2):
             blk.root = self
 
-        if len(subblocks) and hasattr(subblocks[0], '_key'):
-            self._nodes.sort(key=lambda blk: blk._key, reverse=True)
+        self._nodes.sort(reverse=True)
 
     def __len__(self):
         return len(self._nodes)

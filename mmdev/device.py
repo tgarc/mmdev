@@ -201,6 +201,9 @@ class EnumeratedValue(blocks.LeafBlock):
         super(EnumeratedValue, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
         self._value = utils.HexValue(value)
 
+    def _set_width(self, *args, **kwargs):
+        return
+
     @property
     def _key(self):
         return self._value
