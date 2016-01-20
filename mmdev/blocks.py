@@ -1,15 +1,18 @@
 from mmdev import utils
 import logging
 import re
+from operator import attrgetter
+import textwrap
 
 _bracketregex = re.compile('[\[\]]')
+_textwrap = textwrap.TextWrapper(drop_whitespace=True)
 
 class LeafBlock(object):
     _fmt="{name} ({mnemonic})"
     _subfmt="{typename} {mnemonic}"
     _attrs = ['mnemonic', 'name', 'description', 'typename']
     
-    def __init__(self, mnemonic, fullname=None, descr='', kwattrs={}):
+    def __init__(self, mnemonic, fullname=None, descr='-', kwattrs={}):
         self._mnemonic = mnemonic
         self._name = fullname or mnemonic
         self._description = descr
@@ -18,9 +21,9 @@ class LeafBlock(object):
         
         self._kwattrs = kwattrs
 
-        if descr:
-            self._description = ' '.join(l.strip() for l in descr.split('\n'))
-            self.__doc__ = self._description
+        if descr != '-':
+            self._description = _textwrap.fill(self._description)
+        self.__doc__ = self._description
 
     @property
     def _typename(self):
@@ -35,8 +38,18 @@ class LeafBlock(object):
     def to_dict(self):
         return { self._mnemonic: self.attrs }
 
+    def _set_width(self, *args, **kwargs):
+        return
+
+    def _sort(self, *args, **kwargs):
+        return
+
     def _tree(self, *args, **kwargs):
         return self._fmt.format(**self.attrs)
+
+    def summary(self):
+        descr = textwrap.fill(self._description, initial_indent=' '*4, subsequent_indent=' '*4)
+        print self._typename + ' ' + self._fmt.format(**self.attrs) + '\n' + descr
 
     def __repr__(self):
         return "<{:s} '{:s}'>".format(self._typename, self._mnemonic)
@@ -45,7 +58,7 @@ class LeafBlock(object):
 class Block(LeafBlock):
     _dynamicBinding = False
 
-    def __new__(cls, mnemonic, subblocks, fullname=None, descr='', kwattrs={},
+    def __new__(cls, mnemonic, subblocks, fullname=None, descr='-', kwattrs={},
                 bind=True, **kwargs):
         if cls._dynamicBinding and bind:
             mblk = dict(cls.__dict__)
@@ -88,7 +101,7 @@ class Block(LeafBlock):
         else:
             return mblk
 
-    def __init__(self, mnemonic, subblocks, fullname=None, descr='', kwattrs={}, **kwargs):
+    def __init__(self, mnemonic, subblocks, fullname=None, descr='-', kwattrs={}, **kwargs):
         super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
         self._nodes = subblocks
@@ -122,7 +135,7 @@ class Block(LeafBlock):
     def itervalues(self):
         return iter(self._nodes)
 
-    def _sort(self, key=None, reverse=True):
+    def _sort(self, key=attrgetter('_mnemonic'), reverse=False):
         self._nodes.sort(key=key, reverse=reverse)
 
     def to_dict(self):
@@ -177,10 +190,16 @@ class Block(LeafBlock):
         substr = "\n\t".join([blk._subfmt.format(**blk.attrs) for blk in self._nodes])
         print headerstr + '\n\t' + substr if substr else headerstr
 
+    def summary(self):
+        super(Block, self).summary()
+        for blk in self._nodes:
+            descr = textwrap.fill(blk._description, initial_indent=' '*10, subsequent_indent=' '*10)
+            print ' '*4 + '* ' + blk._fmt.format(**blk.attrs) + '\n' + descr
+
     def __repr__(self):
         if self.parent is None:
             return super(Block, self).__repr__()
-        return "<{:s} '{:s}' in {:s} '{}'>".format(self._typename,
+        return "<{:s} '{:s}' in {:s} '{:s}'>".format(self._typename,
                                                      self._mnemonic,
                                                      self.parent._typename,
                                                      self.parent._mnemonic)
@@ -191,12 +210,15 @@ class MemoryMappedBlock(Block):
     _subfmt="{address} {mnemonic}"
     _attrs = Block._attrs + ['address']
 
-    def __new__(cls, mnemonic, address, subblocks, fullname=None, descr='', kwattrs={}, bind=True):
+    def __new__(cls, mnemonic, address, subblocks, fullname=None, descr='-', kwattrs={}, bind=True):
         return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=bind)
 
-    def __init__(self, mnemonic, address, subblocks, fullname='', descr='', kwattrs={}, bind=True):
+    def __init__(self, mnemonic, address, subblocks, fullname='', descr='-', kwattrs={}, bind=True):
         super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=bind)
         self._address = utils.HexValue(address)
+
+    def _sort(self, key=attrgetter('_address'), reverse=True):
+        self._nodes.sort(key=key, reverse=reverse)
 
     def _set_width(self, width):
         self._address = utils.HexValue(self._address, width)
@@ -249,3 +271,24 @@ class IOBlock(MemoryMappedBlock):
         return self.value ^ other
     def __or__(self, other):
         return self.value | other
+
+
+class RootBlock(Block):
+    _attrs = Block._attrs + ['width', 'addressBits']
+
+    def __new__(cls, mnemonic, width, addressBits, blocks, fullname=None, descr='', kwattrs={}, bind=True):
+        return super(RootBlock, cls).__new__(cls, mnemonic, blocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=bind)
+
+    def __init__(self, mnemonic, width, addressBits, blocks, fullname=None, descr='', kwattrs={}, bind=True):
+        super(RootBlock, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=bind)
+
+        self._width = width
+        self._addressBits = addressBits
+        
+        self._sort()
+        for blk in self.walk():
+            blk._set_width(self._width)
+            blk._sort()
+
+    def _sort(self, key=attrgetter('_address'), reverse=True):
+        self._nodes.sort(key=key, reverse=reverse)
