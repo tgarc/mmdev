@@ -41,9 +41,6 @@ class LeafBlock(object):
     def _set_width(self, *args, **kwargs):
         return
 
-    def _sort(self, *args, **kwargs):
-        return
-
     def _tree(self, *args, **kwargs):
         return self._fmt.format(**self.attrs)
 
@@ -111,6 +108,9 @@ class Block(LeafBlock):
         for blk in self.walk(l=2):
             blk.root = self
 
+        if len(subblocks) and hasattr(subblocks[0], '_key'):
+            self._nodes.sort(key=lambda blk: blk._key, reverse=True)
+
     def __len__(self):
         return len(self._nodes)
 
@@ -134,9 +134,6 @@ class Block(LeafBlock):
 
     def itervalues(self):
         return iter(self._nodes)
-
-    def _sort(self, key=attrgetter('_mnemonic'), reverse=False):
-        self._nodes.sort(key=key, reverse=reverse)
 
     def to_dict(self):
         blkdict = self.attrs
@@ -217,8 +214,9 @@ class MemoryMappedBlock(Block):
         super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=bind)
         self._address = utils.HexValue(address)
 
-    def _sort(self, key=attrgetter('_address'), reverse=True):
-        self._nodes.sort(key=key, reverse=reverse)
+    @property
+    def _key(self):
+        return self._address
 
     def _set_width(self, width):
         self._address = utils.HexValue(self._address, width)
@@ -247,20 +245,11 @@ class IOBlock(MemoryMappedBlock):
         self._write(value)
 
     def __set__(self, obj, value):
-        self.value = value
+        if value is not None:
+            self.value = value
 
     def __invert__(self):
         return ~self.value
-    def __ilshift__(self, other):
-        return self.value << other
-    def __irshift__(self, other):
-        return self.value >> other
-    def __iand__(self, other):
-        return self.value & other
-    def __ixor__(self, other):
-        return self.value ^ other
-    def __ior__(self, other):
-        return self.value | other
     def __lshift__(self, other):
         return self.value << other
     def __rshift__(self, other):
@@ -285,10 +274,5 @@ class RootBlock(Block):
         self._width = width
         self._addressBits = addressBits
         
-        self._sort()
         for blk in self.walk():
             blk._set_width(self._width)
-            blk._sort()
-
-    def _sort(self, key=attrgetter('_address'), reverse=True):
-        self._nodes.sort(key=key, reverse=reverse)

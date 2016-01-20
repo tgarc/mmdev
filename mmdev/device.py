@@ -152,17 +152,39 @@ class BitField(blocks.IOBlock):
         self._mask = utils.HexValue(((1 << width) - 1) << offset)
         self._width = width
 
+    @property
+    def _key(self):
+        return self._mask
+
     def _set_width(self, width):
         self._mask = utils.HexValue(self._mask, width)
-
-    def _sort(self, key=attrgetter('_value'), reverse=True):
-        self._nodes.sort(key=key, reverse=reverse)
 
     def _read(self):
         return (self.parent.value & self._mask) >> self._address
 
     def _write(self, value):
         self.parent.value = (self.parent.value & ~self._mask) | (value << self._address)
+
+    def __ilshift__(self, other):
+        regval = self.parent.value 
+        bitval = (regval & self._mask) << other
+        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
+    def __irshift__(self, other):
+        regval = self.parent.value 
+        bitval = (regval & self._mask) >> other
+        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
+    def __iand__(self, other):
+        regval = self.parent.value 
+        bitval = (regval & self._mask) & (other << self._address)
+        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
+    def __ixor__(self, other):
+        regval = self.parent.value 
+        bitval = (regval & self._mask) ^ (other << self._address)
+        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
+    def __ior__(self, other):
+        regval = self.parent.value 
+        bitval = (regval & self._mask) | (other << self._address)
+        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
 
     def __repr__(self):
         return "<{:s} '{:s}' in {:s} '{:s}' & {}>".format(self._typename, 
@@ -178,6 +200,10 @@ class EnumeratedValue(blocks.LeafBlock):
     def __init__(self, mnemonic, value, fullname=None, descr='-', kwattrs={}):
         super(EnumeratedValue, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
         self._value = utils.HexValue(value)
+
+    @property
+    def _key(self):
+        return self._value
 
     def __repr__(self):
         return "<{:s} '{:s}' in {:s} '{:s}'>".format(self._typename,
