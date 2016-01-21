@@ -7,10 +7,24 @@ import textwrap
 _bracketregex = re.compile('[\[\]]')
 _textwrap = textwrap.TextWrapper(drop_whitespace=True)
 
+
+class MetaBlock(type):
+    def __init__(self, name, bases, attrs):
+        for b in bases:
+            if type(b) is not MetaBlock:
+                continue
+            newattrs = attrs.get('_attrs', ())
+            if isinstance(newattrs, basestring):
+                newattrs = (newattrs,)
+            self._attrs = tuple(getattr(b, '_attrs', ())) + tuple(newattrs)
+
+
 class LeafBlock(object):
+    __metaclass__ = MetaBlock
+
     _fmt="{name} ({mnemonic})"
     _subfmt="{typename} {mnemonic}"
-    _attrs = ['mnemonic', 'name', 'description', 'typename']
+    _attrs = 'mnemonic', 'name', 'description', 'typename'
     
     def __init__(self, mnemonic, fullname=None, descr='-', kwattrs={}):
         self._mnemonic = mnemonic
@@ -28,9 +42,6 @@ class LeafBlock(object):
     @property
     def _typename(self):
         return self.__class__.__name__
-
-    def __lt__(self, other):
-        return self._key < other._key
 
     @property
     def _key(self):
@@ -59,13 +70,11 @@ class LeafBlock(object):
 class Block(LeafBlock):
     _dynamicBinding = False
 
-    def __new__(cls, mnemonic, subblocks, fullname=None, descr='-', kwattrs={},
-                bind=True, **kwargs):
+    def __new__(cls, mnemonic, subblocks, bind=True, **kwargs):
         if cls._dynamicBinding and bind:
             mblk = dict(cls.__dict__)
         else:
-            mblk = super(Block, cls).__new__(cls, mnemonic, fullname=fullname,
-                                             descr=descr, kwattrs=kwattrs)
+            mblk = super(Block, cls).__new__(cls, mnemonic, **kwargs)
 
         if not bind:
             return mblk
@@ -97,13 +106,12 @@ class Block(LeafBlock):
 
         if cls._dynamicBinding:
             newcls = type(cls.__name__, (cls,) + cls.__bases__, mblk)
-            return super(Block, newcls).__new__(newcls, mnemonic, fullname=fullname,
-                                                descr=descr, kwattrs=kwattrs)
+            return super(Block, newcls).__new__(newcls, mnemonic, **kwargs)
         else:
             return mblk
 
-    def __init__(self, mnemonic, subblocks, fullname=None, descr='-', kwattrs={}, **kwargs):
-        super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    def __init__(self, mnemonic, subblocks, bind=True, **kwargs):
+        super(Block, self).__init__(mnemonic, **kwargs)
 
         self._nodes = subblocks
         for blk in self._nodes:
@@ -112,7 +120,7 @@ class Block(LeafBlock):
         for blk in self.walk(l=2):
             blk.root = self
 
-        self._nodes.sort(reverse=True)
+        self._nodes.sort(key=lambda x: x._key, reverse=True)
 
     def __len__(self):
         return len(self._nodes)
@@ -208,13 +216,13 @@ class Block(LeafBlock):
 class MemoryMappedBlock(Block):
     _fmt="{name} ({mnemonic}, {address})"
     _subfmt="{address} {mnemonic}"
-    _attrs = Block._attrs + ['address']
+    _attrs = 'address'
 
-    def __new__(cls, mnemonic, address, subblocks, fullname=None, descr='-', kwattrs={}, bind=True):
-        return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=bind)
+    def __new__(cls, mnemonic, address, subblocks, **kwargs):
+        return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, **kwargs)
 
-    def __init__(self, mnemonic, address, subblocks, fullname='', descr='-', kwattrs={}, bind=True):
-        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=bind)
+    def __init__(self, mnemonic, address, subblocks, **kwargs):
+        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, **kwargs)
         self._address = utils.HexValue(address)
 
     @property
@@ -266,16 +274,17 @@ class IOBlock(MemoryMappedBlock):
 
 
 class RootBlock(Block):
-    _attrs = Block._attrs + ['width', 'addressBits']
+    _attrs = 'width', 'addressBits'
 
-    def __new__(cls, mnemonic, width, addressBits, blocks, fullname=None, descr='', kwattrs={}, bind=True):
-        return super(RootBlock, cls).__new__(cls, mnemonic, blocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=bind)
+    def __new__(cls, mnemonic, width, addressBits, blocks, **kwargs):
+        return super(RootBlock, cls).__new__(cls, mnemonic, blocks, **kwargs)
 
-    def __init__(self, mnemonic, width, addressBits, blocks, fullname=None, descr='', kwattrs={}, bind=True):
-        super(RootBlock, self).__init__(mnemonic, blocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=bind)
+    def __init__(self, mnemonic, width, addressBits, blocks, **kwargs):
+        super(RootBlock, self).__init__(mnemonic, blocks, **kwargs)
 
         self._width = width
         self._addressBits = addressBits
         
         for blk in self.walk():
-            blk._set_width(self._width)
+            if hasattr(blk, '_set_width'):
+                blk._set_width(self._width)

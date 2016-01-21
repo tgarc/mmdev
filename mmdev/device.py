@@ -1,7 +1,7 @@
 from mmdev import blocks
 from mmdev import link
 from mmdev import utils
-from operator import attrgetter
+
 
 _levels = {'device': 0,
            'peripheral': 1,
@@ -11,16 +11,16 @@ _levels = {'device': 0,
 
 class Device(blocks.RootBlock):
     _fmt = "{name} ({mnemonic}, {vendor})"
-    _attrs = blocks.Block._attrs + ['vendor']
+    _attrs = 'vendor'
 
-    def __new__(cls, mnemonic, width, addressBits, blocks, cpu=None, fullname=None, descr='-', vendor='Unknown Vendor', kwattrs={}):
-        return super(Device, cls).__new__(cls, mnemonic, width, addressBits, blocks, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    def __new__(cls, mnemonic, width, addressBits, blocks, cpu=None, vendor='Unknown Vendor', **kwargs):
+        return super(Device, cls).__new__(cls, mnemonic, width, addressBits, blocks, **kwargs)
 
-    def __init__(self, mnemonic, width, addressBits, blocks, cpu=None, fullname=None, descr='-', vendor='Unknown Vendor', kwattrs={}):
-        super(Device, self).__init__(mnemonic, width, addressBits, blocks, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    def __init__(self, mnemonic, width, addressBits, blocks, cpu=None, vendor='Unknown Vendor', **kwargs):
+        super(Device, self).__init__(mnemonic, width, addressBits, blocks, **kwargs)
 
         self.cpu = cpu
-        self._vendor = vendor or 'Unknown Vendor'
+        self._vendor = vendor
         
         self._map = {}
         for blk in self.walk():
@@ -43,6 +43,16 @@ class Device(blocks.RootBlock):
         self._link = link
         self._link.connect()
 
+    def write(self, address, value, accessSize=None):
+        if accessSize is None:
+            accessSize = self._width
+        self._link.writeMem(address, value, accessSize=accessSize)
+
+    def read(self, address, accessSize=None):
+        if accessSize is None:
+            accessSize = self._width
+        return utils.HexValue(self._link.readMem(address, accessSize=accessSize), accessSize)
+
     def set_format(self, blocktype, fmt):
         for blk in self.walk(d=1, l=_levels[blocktype]):
             blk._fmt = fmt
@@ -58,16 +68,6 @@ class Device(blocks.RootBlock):
         if res is None:
             return ()
         return tuple(res) if isinstance(res, list) else (res,)
-
-    def write(self, address, value, accessSize=None):
-        if accessSize is None:
-            accessSize = self._width
-        self._link.writeMem(address, value, accessSize=accessSize)
-
-    def read(self, address, accessSize=None):
-        if accessSize is None:
-            accessSize = self._width
-        return utils.HexValue(self._link.readMem(address, accessSize=accessSize), accessSize)
 
     @staticmethod
     def from_devfile(devfile, file_format, raiseErr=True):
@@ -89,127 +89,3 @@ class Device(blocks.RootBlock):
     @classmethod
     def from_svd(cls, devfile, **kwargs):
         return cls.from_devfile(devfile, 'svd', **kwargs)
-
-
-class CPU(blocks.LeafBlock):
-    _attrs = blocks.LeafBlock._attrs + ['revision', 'endian', 'mpuPresent', 'fpuPresent']
-
-    def __init__(self, mnemonic, revision, endian, mpuPresent, fpuPresent, kwattrs={}):
-        super(CPU, self).__init__(mnemonic, kwattrs=kwattrs)
-        self._revision = revision
-        self._endian = endian
-        self._mpuPresent = mpuPresent
-        self._fpuPresent = fpuPresent
-
-
-class Peripheral(blocks.MemoryMappedBlock):
-    _dynamicBinding = True
-
-    def __new__(cls, mnemonic, address, subblocks, fullname=None, descr='-', kwattrs={}):
-        return super(Peripheral, cls).__new__(cls, mnemonic, address, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=True)
-
-    def __init__(self, mnemonic, address, subblocks, fullname=None, descr='-', kwattrs={}):
-        super(Peripheral, self).__init__(mnemonic, address, subblocks, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=True)
-        self._address = utils.HexValue(address)
-
-
-class Register(blocks.IOBlock):
-    _dynamicBinding = True
-    _attrs = blocks.IOBlock._attrs + ['resetValue', 'resetMask', 'width']
-
-    def __new__(cls, mnemonic, width, address, subblocks, resetMask=0, resetValue=None,
-                fullname=None, descr='-', kwattrs={}):
-        return super(Register, cls).__new__(cls, mnemonic, address, subblocks,
-                                            fullname=fullname, descr=descr, kwattrs=kwattrs)
-
-    def __init__(self, mnemonic, width, address, subblocks, resetMask=0, resetValue=None,
-                fullname=None, descr='-', kwattrs={}):
-        super(Register, self).__init__(mnemonic, address, subblocks, 
-                                       fullname=fullname, descr=descr, kwattrs=kwattrs)
-        if resetMask == 0:
-            resetValue = 0
-        self._width = width
-        self._resetValue = utils.HexValue(resetValue, width)
-        self._resetMask = utils.HexValue(resetMask, width)
-
-    def _read(self):
-        return self.root.read(self._address, self._width)
-
-    def _write(self, value):
-        return self.root.write(self._address, value, self._width)
-
-
-class BitField(blocks.IOBlock):
-    _fmt = "{name} ({mnemonic}, {mask})"
-    _subfmt="{mask} {mnemonic}"
-    _attrs = blocks.IOBlock._attrs + ['mask']
-
-    def __new__(cls, mnemonic, width, offset, values=[], fullname=None, descr='-', kwattrs={}):
-        return super(BitField, cls).__new__(cls, mnemonic, offset, values, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=False)
-
-    def __init__(self, mnemonic, width, offset, values=[], fullname=None, descr='-', kwattrs={}):
-        super(BitField, self).__init__(mnemonic, offset, values, fullname=fullname, descr=descr, kwattrs=kwattrs, bind=False)
-        self._mask = utils.HexValue(((1 << width) - 1) << offset)
-        self._width = width
-
-    @property
-    def _key(self):
-        return self._mask
-
-    def _set_width(self, width):
-        self._mask = utils.HexValue(self._mask, width)
-
-    def _read(self):
-        return (self.parent.value & self._mask) >> self._address
-
-    def _write(self, value):
-        self.parent.value = (self.parent.value & ~self._mask) | (value << self._address)
-
-    def __ilshift__(self, other):
-        regval = self.parent.value 
-        bitval = (regval & self._mask) << other
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
-    def __irshift__(self, other):
-        regval = self.parent.value 
-        bitval = (regval & self._mask) >> other
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
-    def __iand__(self, other):
-        regval = self.parent.value 
-        bitval = (regval & self._mask) & (other << self._address)
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
-    def __ixor__(self, other):
-        regval = self.parent.value 
-        bitval = (regval & self._mask) ^ (other << self._address)
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
-    def __ior__(self, other):
-        regval = self.parent.value 
-        bitval = (regval & self._mask) | (other << self._address)
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
-
-    def __repr__(self):
-        return "<{:s} '{:s}' in {:s} '{:s}' & {}>".format(self._typename, 
-                                                          self._mnemonic,
-                                                          self.parent._typename,
-                                                          self.parent._mnemonic, 
-                                                          self._mask)
-
-class EnumeratedValue(blocks.LeafBlock):
-    _fmt = "{mnemonic} (value={value}): {description}"
-    _attrs = blocks.LeafBlock._attrs + ['value']
-
-    def __init__(self, mnemonic, value, fullname=None, descr='-', kwattrs={}):
-        super(EnumeratedValue, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
-        self._value = utils.HexValue(value)
-
-    def _set_width(self, *args, **kwargs):
-        return
-
-    @property
-    def _key(self):
-        return self._value
-
-    def __repr__(self):
-        return "<{:s} '{:s}' in {:s} '{:s}'>".format(self._typename,
-                                                     self._mnemonic,
-                                                     self.parent._typename,
-                                                     self.parent._mnemonic)

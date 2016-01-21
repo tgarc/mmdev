@@ -1,5 +1,6 @@
 from mmdev.parsers.deviceparser import DeviceParser
-from mmdev.device import Device, Peripheral, Register, BitField
+from mmdev.device import Device
+from mmdev.components import Peripheral, Register, BitField
 
 
 class PYCFGParser(DeviceParser):
