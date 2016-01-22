@@ -3,6 +3,8 @@ import logging
 import re
 from operator import attrgetter
 import textwrap
+import json
+
 
 _bracketregex = re.compile('[\[\]]')
 _textwrap = textwrap.TextWrapper(drop_whitespace=True)
@@ -34,10 +36,7 @@ class LeafBlock(object):
         self.root = self
         
         self._kwattrs = kwattrs
-
-        if descr != '-':
-            self._description = _textwrap.fill(self._description)
-        self.__doc__ = self._description
+        self.__doc__ = _textwrap.fill(self._description)
 
     @property
     def _typename(self):
@@ -53,11 +52,14 @@ class LeafBlock(object):
         attrs['extra'] = self._kwattrs
         return attrs
 
-    def to_dict(self):
+    def to_json(self, recursive=False, **kwargs):
+        return json.dumps(self.to_dict(recursive=recursive), **kwargs)
+
+    def to_dict(self, **kwargs):
         return { self._mnemonic: self.attrs }
 
-    def _tree(self, *args, **kwargs):
-        return self._fmt.format(**self.attrs)
+    def _tree(self, d=-1, pfx=''):
+        return textwrap.fill(self._fmt.format(**self.attrs), subsequent_indent=pfx)
 
     def summary(self):
         descr = textwrap.fill(self._description, initial_indent=' '*4, subsequent_indent=' '*4)
@@ -128,6 +130,22 @@ class Block(LeafBlock):
     def __iter__(self):
         return iter(self._nodes)
 
+    def export(self, namespace):
+        namespace.update(dict(self.iteritems()))
+
+    def to_dict(self, recursive=False):
+        blkdict = self.attrs
+        for blk in self.itervalues():
+            key = blk._typename.lower()+'s'
+            if key not in blkdict:
+                blkdict[key] = {}
+            if recursive:
+                v = blk.to_dict()
+            else:
+                v = blk.attrs
+            blkdict[key].update(v)
+        return { self._mnemonic: blkdict }
+
     def iterkeys(self):
         return iter(blk._mnemonic for blk in self._nodes)
 
@@ -145,16 +163,6 @@ class Block(LeafBlock):
 
     def itervalues(self):
         return iter(self._nodes)
-
-    def to_dict(self):
-        blkdict = self.attrs
-        del blkdict['extra']
-        for blk in self.itervalues():
-            key = blk._typename.lower()+'s'
-            if key not in blkdict:
-                blkdict[key] = {}
-            blkdict[key].update(blk.to_dict())
-        return { self._mnemonic: blkdict }
 
     def walk(self, d=-1, l=1):
         n = 1
@@ -176,7 +184,7 @@ class Block(LeafBlock):
                     l -= 1
             
     def _tree(self, d=-1, pfx=''):
-        treestr = self._fmt.format(**self.attrs)
+        treestr = super(Block, self)._tree(d=d, pfx=pfx)
 
         if d == 0: 
             return treestr
@@ -191,7 +199,7 @@ class Block(LeafBlock):
         return treestr
 
     def tree(self, depth=2):
-        print self._tree(d=depth)
+        print self._typename + ' ' + self._tree(d=depth)
 
     def ls(self):
         headerstr = self._fmt.format(**self.attrs)
@@ -256,21 +264,7 @@ class IOBlock(MemoryMappedBlock):
         self._write(value)
 
     def __set__(self, obj, value):
-        if value is not None:
-            self.value = value
-
-    def __invert__(self):
-        return ~self.value
-    def __lshift__(self, other):
-        return self.value << other
-    def __rshift__(self, other):
-        return self.value >> other
-    def __and__(self, other):
-        return self.value & other
-    def __xor__(self, other):
-        return self.value ^ other
-    def __or__(self, other):
-        return self.value | other
+        self.value = value
 
 
 class RootBlock(Block):

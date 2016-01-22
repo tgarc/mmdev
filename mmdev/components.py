@@ -41,6 +41,31 @@ class Register(blocks.IOBlock):
     def _write(self, value):
         return self.root.write(self._address, value, self._width)
 
+    def __invert__(self):
+        return ~self.value
+
+    def __lshift__(self, other):
+        return self.value << other
+    def __rshift__(self, other):
+        return self.value >> other
+    def __and__(self, other):
+        return self.value & other
+    def __xor__(self, other):
+        return self.value ^ other
+    def __or__(self, other):
+        return self.value | other
+
+    def __rlshift__(self, other):
+        return self.value << other
+    def __rrshift__(self, other):
+        return self.value >> other
+    def __rand__(self, other):
+        return self.value & other
+    def __rxor__(self, other):
+        return self.value ^ other
+    def __ror__(self, other):
+        return self.value | other
+
 
 class BitField(blocks.IOBlock):
     _fmt = "{name} ({mnemonic}, {mask})"
@@ -65,29 +90,34 @@ class BitField(blocks.IOBlock):
     def _read(self):
         return (self.parent.value & self._mask) >> self._address
 
+    # notice that writing a bitfield requires a read of the register first
     def _write(self, value):
         self.parent.value = (self.parent.value & ~self._mask) | (value << self._address)
 
-    def __ilshift__(self, other):
-        regval = self.parent.value 
-        bitval = (regval & self._mask) << other
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
-    def __irshift__(self, other):
-        regval = self.parent.value 
-        bitval = (regval & self._mask) >> other
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
-    def __iand__(self, other):
-        regval = self.parent.value 
-        bitval = (regval & self._mask) & (other << self._address)
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
-    def __ixor__(self, other):
-        regval = self.parent.value 
-        bitval = (regval & self._mask) ^ (other << self._address)
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
-    def __ior__(self, other):
-        regval = self.parent.value 
-        bitval = (regval & self._mask) | (other << self._address)
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
+    def __invert__(self):
+        return ~self._key
+
+    def __lshift__(self, other):
+        return self._key << other
+    def __rshift__(self, other):
+        return self._key >> other
+    def __and__(self, other):
+        return self._key & other
+    def __xor__(self, other):
+        return self._key ^ other
+    def __or__(self, other):
+        return self._key | other
+
+    def __rlshift__(self, other):
+        return self._key << other
+    def __rrshift__(self, other):
+        return self._key >> other
+    def __rand__(self, other):
+        return self._key & other
+    def __rxor__(self, other):
+        return self._key ^ other
+    def __ror__(self, other):
+        return self._key | other
 
     def __repr__(self):
         return "<{:s} '{:s}' in {:s} '{:s}' & {}>".format(self._typename, 
@@ -97,7 +127,7 @@ class BitField(blocks.IOBlock):
                                                           self._mask)
 
 class EnumeratedValue(blocks.LeafBlock):
-    _fmt = "{mnemonic} (value={value}): {description}"
+    _fmt = "{mnemonic} (value={value})"
     _attrs = 'value'
 
     def __init__(self, mnemonic, value, **kwargs):

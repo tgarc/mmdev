@@ -182,7 +182,7 @@ This bit is set to 1 if a Write Data Error occurs. This happens if:
 submitted to the AP.
 
 This bit can only be cleared to 0 by writing 1 to the WDERRCLR field of the AP
-Abort Register, see The AP Abort Register, ABORT on page 6-6.  After a power-on
+Abort Register, see The AP Abort Register.  After a power-on
 reset this bit is 0."""),
                        components.BitField('READOK', 1, 6, descr="""\
 This bit is set to 1 if the response to the previous AP or RDBUFF read was

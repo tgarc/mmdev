@@ -6,7 +6,8 @@ from mmdev import utils
 _levels = {'device': 0,
            'peripheral': 1,
            'register': 2,
-           'bitfield': 3}
+           'bitfield': 3,
+           'enumeratedvalue': 4}
 
 
 class Device(blocks.RootBlock):
@@ -54,7 +55,7 @@ class Device(blocks.RootBlock):
         return utils.HexValue(self._link.readMem(address, accessSize=accessSize), accessSize)
 
     def set_format(self, blocktype, fmt):
-        for blk in self.walk(d=1, l=_levels[blocktype]):
+        for blk in self.walk(d=1, l=_levels[blocktype.lower()]):
             blk._fmt = fmt
 
     def find(self, key):
