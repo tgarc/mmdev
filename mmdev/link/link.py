@@ -21,8 +21,8 @@ class Link(object):
     def read(self):
         return -1
 
-    def writeMem(self, addr, value, accessSize=32):
+    def memWrite(self, addr, value, accessSize=32):
         return
 
-    def readMem(self, addr, accessSize=32):
+    def memRead(self, addr, accessSize=32):
         return -1

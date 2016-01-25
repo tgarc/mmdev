@@ -113,7 +113,7 @@ class SVDParser(DeviceParser):
 
         pphs = cls.parse_subblocks(devnode.pop('peripherals'), cls.parse_peripheral, **regopts)
 
-        return Device(mnem, width, addressUnitBits, pphs, cpu=cpu,
+        return Device(mnem, addressUnitBits, width, pphs, cpu=cpu,
                       fullname=name, descr=descr, vendor=vendor,
                       kwattrs=devnode)
 
@@ -155,7 +155,7 @@ class SVDParser(DeviceParser):
 
         dim = _readint(regnode, 'dim', parent=parent)
         if dim is None:
-            return Register(name, size, addr, bits, resetMask=resetmask,
+            return Register(name, addr, size, bits, resetMask=resetmask,
                             resetValue=resetvalue, fullname=dispname,
                             descr=descr, kwattrs=regnode)
 
@@ -172,8 +172,8 @@ class SVDParser(DeviceParser):
         regblk = []
         for i, idx in enumerate(dimidx):
             regblk.append(Register(name % idx,
-                                   size,
                                    addr + i*diminc,
+                                   size,
                                    bits,
                                    resetMask=resetmask, 
                                    resetValue=resetvalue,
@@ -219,7 +219,7 @@ class SVDParser(DeviceParser):
 
         enumvals = cls.parse_subblocks(enumvals, cls.parse_enumerated_value)
 
-        return BitField(name, bit_width, bit_offset, values=enumvals, descr=descr, kwattrs=bitnode)
+        return BitField(name, bit_offset, bit_width, values=enumvals, descr=descr, kwattrs=bitnode)
 
     @classmethod
     def parse_enumerated_value(cls, enumnode, parent={}):

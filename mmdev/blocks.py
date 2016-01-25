@@ -72,11 +72,11 @@ class LeafBlock(object):
 class Block(LeafBlock):
     _dynamicBinding = False
 
-    def __new__(cls, mnemonic, subblocks, bind=True, **kwargs):
+    def __new__(cls, mnemonic, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
         if cls._dynamicBinding and bind:
             mblk = dict(cls.__dict__)
         else:
-            mblk = super(Block, cls).__new__(cls, mnemonic, **kwargs)
+            mblk = super(Block, cls).__new__(cls, mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
         if not bind:
             return mblk
@@ -108,12 +108,12 @@ class Block(LeafBlock):
 
         if cls._dynamicBinding:
             newcls = type(cls.__name__, (cls,) + cls.__bases__, mblk)
-            return super(Block, newcls).__new__(newcls, mnemonic, **kwargs)
+            return super(Block, newcls).__new__(newcls, mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
         else:
             return mblk
 
-    def __init__(self, mnemonic, subblocks, bind=True, **kwargs):
-        super(Block, self).__init__(mnemonic, **kwargs)
+    def __init__(self, mnemonic, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
+        super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
         self._nodes = subblocks
         for blk in self._nodes:
@@ -226,11 +226,11 @@ class MemoryMappedBlock(Block):
     _subfmt="{address} {mnemonic}"
     _attrs = 'address'
 
-    def __new__(cls, mnemonic, address, subblocks, **kwargs):
-        return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, **kwargs)
+    def __new__(cls, mnemonic, address, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
+        return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
-    def __init__(self, mnemonic, address, subblocks, **kwargs):
-        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, **kwargs)
+    def __init__(self, mnemonic, address, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
+        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
         self._address = utils.HexValue(address)
 
     @property
@@ -270,11 +270,11 @@ class IOBlock(MemoryMappedBlock):
 class RootBlock(Block):
     _attrs = 'width', 'addressBits'
 
-    def __new__(cls, mnemonic, width, addressBits, blocks, **kwargs):
-        return super(RootBlock, cls).__new__(cls, mnemonic, blocks, **kwargs)
+    def __new__(cls, mnemonic, addressBits, width, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
+        return super(RootBlock, cls).__new__(cls, mnemonic, subblocks, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
-    def __init__(self, mnemonic, width, addressBits, blocks, **kwargs):
-        super(RootBlock, self).__init__(mnemonic, blocks, **kwargs)
+    def __init__(self, mnemonic, addressBits, width, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
+        super(RootBlock, self).__init__(mnemonic, subblocks, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
         self._width = width
         self._addressBits = addressBits

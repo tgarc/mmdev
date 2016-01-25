@@ -5,8 +5,11 @@ from mmdev import utils
 class CPU(blocks.LeafBlock):
     _attrs = 'revision', 'endian', 'mpuPresent', 'fpuPresent'
 
-    def __init__(self, mnemonic, revision, endian, mpuPresent, fpuPresent, **kwargs):
-        super(CPU, self).__init__(mnemonic, **kwargs)
+    def __new__(cls, mnemonic, revision, endian, mpuPresent, fpuPresent, fullname=None, descr='-', kwattrs={}):
+        return super(CPU, cls).__new__(cls, mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
+
+    def __init__(self, mnemonic, revision, endian, mpuPresent, fpuPresent, fullname=None, descr='-', kwattrs={}):
+        super(CPU, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
         self._revision = revision
         self._endian = endian
         self._mpuPresent = mpuPresent
@@ -16,19 +19,22 @@ class CPU(blocks.LeafBlock):
 class Peripheral(blocks.MemoryMappedBlock):
     _dynamicBinding = True
 
-    def __new__(cls, *args, **kwargs):
-        return super(Peripheral, cls).__new__(cls, *args, bind=True, **kwargs)
+    def __new__(cls, mnemonic, baseAddress, registers, bind=True,fullname=None, descr='-', kwattrs={}):
+        return super(Peripheral, cls).__new__(cls, mnemonic, baseAddress, registers, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
+
+    def __init__(self, mnemonic, baseAddress, registers, bind=True,fullname=None, descr='-', kwattrs={}):
+        super(Peripheral, self).__init__(mnemonic, baseAddress, registers, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
 
 class Register(blocks.IOBlock):
     _dynamicBinding = True
     _attrs = 'resetValue', 'resetMask', 'width'
 
-    def __new__(cls, mnemonic, width, address, subblocks, resetMask=0, resetValue=None, **kwargs):
-        return super(Register, cls).__new__(cls, mnemonic, address, subblocks, **kwargs)
+    def __new__(cls, mnemonic, address, width, fields, resetMask=0, resetValue=None, bind=True,fullname=None, descr='-', kwattrs={}):
+        return super(Register, cls).__new__(cls, mnemonic, address, fields, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
-    def __init__(self, mnemonic, width, address, subblocks, resetMask=0, resetValue=None, **kwargs):
-        super(Register, self).__init__(mnemonic, address, subblocks, **kwargs)
+    def __init__(self, mnemonic, address, width, fields, resetMask=0, resetValue=None, bind=True,fullname=None, descr='-', kwattrs={}):
+        super(Register, self).__init__(mnemonic, address, fields, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
         if resetMask == 0:
             resetValue = 0
         self._width = width
@@ -70,13 +76,13 @@ class Register(blocks.IOBlock):
 class BitField(blocks.IOBlock):
     _fmt = "{name} ({mnemonic}, {mask})"
     _subfmt="{mask} {mnemonic}"
-    _attrs = 'mask'
+    _attrs = 'mask', 'width'
 
-    def __new__(cls, mnemonic, width, offset, values=[], **kwargs):
-        return super(BitField, cls).__new__(cls, mnemonic, offset, values, bind=False, **kwargs)
+    def __new__(cls, mnemonic, offset, width, values=[], fullname=None, descr='-', kwattrs={}):
+        return super(BitField, cls).__new__(cls, mnemonic, offset, values, bind=False, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
-    def __init__(self, mnemonic, width, offset, values=[], **kwargs):
-        super(BitField, self).__init__(mnemonic, offset, values, bind=False, **kwargs)
+    def __init__(self, mnemonic, offset, width, values=[], fullname=None, descr='-', kwattrs={}):
+        super(BitField, self).__init__(mnemonic, offset, values, bind=False, fullname=fullname, descr=descr, kwattrs=kwattrs)
         self._mask = utils.HexValue(((1 << width) - 1) << offset)
         self._width = width
 
@@ -130,8 +136,11 @@ class EnumeratedValue(blocks.LeafBlock):
     _fmt = "{mnemonic} (value={value})"
     _attrs = 'value'
 
-    def __init__(self, mnemonic, value, **kwargs):
-        super(EnumeratedValue, self).__init__(mnemonic, **kwargs)
+    def __new__(cls, mnemonic, value, fullname=None, descr='-', kwattrs={}):
+        return super(EnumeratedValue, cls).__new__(cls, mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
+
+    def __init__(self, mnemonic, value, fullname=None, descr='-', kwattrs={}):
+        super(EnumeratedValue, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
         self._value = utils.HexValue(value)
 
     @property

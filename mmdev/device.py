@@ -14,11 +14,11 @@ class Device(blocks.RootBlock):
     _fmt = "{name} ({mnemonic}, {vendor})"
     _attrs = 'vendor'
 
-    def __new__(cls, mnemonic, width, addressBits, blocks, cpu=None, vendor='Unknown Vendor', **kwargs):
-        return super(Device, cls).__new__(cls, mnemonic, width, addressBits, blocks, **kwargs)
+    def __new__(cls, mnemonic, addressBits, width, peripherals, cpu=None, vendor='Unknown Vendor', **kwargs):
+        return super(Device, cls).__new__(cls, mnemonic, addressBits, width, peripherals, **kwargs)
 
-    def __init__(self, mnemonic, width, addressBits, blocks, cpu=None, vendor='Unknown Vendor', **kwargs):
-        super(Device, self).__init__(mnemonic, width, addressBits, blocks, **kwargs)
+    def __init__(self, mnemonic, addressBits, width, peripherals, cpu=None, vendor='Unknown Vendor', **kwargs):
+        super(Device, self).__init__(mnemonic, addressBits, width, peripherals, **kwargs)
 
         self.cpu = cpu
         self._vendor = vendor
@@ -47,12 +47,12 @@ class Device(blocks.RootBlock):
     def write(self, address, value, accessSize=None):
         if accessSize is None:
             accessSize = self._width
-        self._link.writeMem(address, value, accessSize=accessSize)
+        self._link.memWrite(address, value, accessSize=accessSize)
 
     def read(self, address, accessSize=None):
         if accessSize is None:
             accessSize = self._width
-        return utils.HexValue(self._link.readMem(address, accessSize=accessSize), accessSize)
+        return utils.HexValue(self._link.memRead(address, accessSize=accessSize), accessSize)
 
     def set_format(self, blocktype, fmt):
         for blk in self.walk(d=1, l=_levels[blocktype.lower()]):
