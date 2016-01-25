@@ -134,6 +134,7 @@ class BitField(blocks.IOBlock):
 
 class EnumeratedValue(blocks.LeafBlock):
     _fmt = "{mnemonic} (value={value})"
+    _subfmt="{value} {mnemonic}"
     _attrs = 'value'
 
     def __new__(cls, mnemonic, value, fullname=None, descr='-', kwattrs={}):

@@ -9,10 +9,10 @@ class Transport(object):
         self.interface = interface
 
     def sendPacket(self, *args, **kwargs):
-        return
+        self.interface.write(*args, **kwargs)
 
     def readPacket(self, *args, **kwargs):
-        return -1
+        return self.interface.read(*args, **kwargs)
 
     def sendRequest(self, *args, **kwargs):
-        return
+        return 1

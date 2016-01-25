@@ -3,8 +3,8 @@ class Link(object):
     An interface for a cortex-m DAP
     """
     def __init__(self, interface, transport):
-        self.transport = transport
-        self.interface = interface
+        self._transport = transport
+        self._interface = interface
 
     def connect(self):
         return
