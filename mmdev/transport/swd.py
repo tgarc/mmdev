@@ -28,14 +28,14 @@ class SWD(Transport):
         # transmission of data) followed by the data word and parity bit
         data = '0' + reverse_bits(data,w=32) + ('1' if parity else '0')
 
-        logging.debug("WDATA %s" % data)
+        logging.debug("WDATA %s (0x%08x)" % (data[1:-1], int(data[-2:0:-1], base=2)))
         self.interface.write(data)
 
     def readPacket(self):
         # read 32bit word + 1 bit parity, and clock 1 additional cycle to
-        # satisfy turnaround for next transmissoin
+        # satisfy turnaround for next transmission
         x = self.interface.read(34)
-        logging.debug("RDATA %s" % x[31::-1])
+        logging.debug("RDATA %s (0x%08x)" % (x[31::-1], int(x[:31], base=2)))
         data, presp = int(x[31::-1], 2), int(x[32], 2)
 
         parity = data
@@ -62,7 +62,7 @@ class SWD(Transport):
         parity &= 1
 
         rqst = '1{}{}01'.format(reverse_bits(rqst,w=4), '1' if parity else '0')
-        logging.debug('RQST %s' % rqst)
+        logging.debug('RQST %s (apndp=%d, rnw=%d, a23=0x%x)' % (rqst, apndp, rnw, a23))
         self.interface.write(rqst)
 
         # wait 1 TRN then read 3 bit ACK
@@ -71,6 +71,6 @@ class SWD(Transport):
         ack = int(ack[3:0:-1],2)
 
         if ack!=ACK_OK and ack!=ACK_WAIT:
-            raise Transport.TransferError('Received invalid ACK (0b{:03b})'.format(ack))
+            raise Transport.TransferError('Received invalid ACK ({:#03b})'.format(ack))
 
         return ack

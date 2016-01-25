@@ -20,26 +20,15 @@ class HexValue(int):
         return HexValue(int.__invert__(self), self._width)
 
     def __lshift__(self, other):
-        return HexValue(int.__lshift__(self, other), self._width+other)
+        return HexValue(int.__lshift__(self, int(other)), self._width+int(other))
     def __rshift__(self, other):
-        return HexValue(int.__rshift__(self, other), self._width)
+        return HexValue(int.__rshift__(self, int(other)), self._width)
     def __and__(self, other):
-        return HexValue(int.__and__(self, other), self._width)
+        return HexValue(int.__and__(self, int(other)), self._width)
     def __xor__(self, other):
-        return HexValue(int.__xor__(self, other), self._width)
+        return HexValue(int.__xor__(self, int(other)), self._width)
     def __or__(self, other):
-        return HexValue(int.__or__(self, other), self._width)
-
-    def __rlshift__(self, other):
-        return HexValue(int.__rlshift__(self, other), self._width)
-    def __rrshift__(self, other):
-        return HexValue(int.__rrshift__(self, other), self._width)
-    def __rand__(self, other):
-        return HexValue(int.__rand__(self, other), self._width)
-    def __rxor__(self, other):
-        return HexValue(int.__rxor__(self, other), self._width)
-    def __ror__(self, other):
-        return HexValue(int.__ror__(self, other), self._width)
+        return HexValue(int.__or__(self, int(other)), self._width)
 
     def __repr__(self):
         return self._fmt(self if self >= 0 else self&self._mask)

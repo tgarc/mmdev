@@ -237,6 +237,9 @@ class MemoryMappedBlock(Block):
     def _key(self):
         return self._address
 
+    def __int__(self):
+        return int(self._key)
+
     def _set_width(self, width):
         self._address = utils.HexValue(self._address, width)
 

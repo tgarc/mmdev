@@ -46,6 +46,7 @@ CSW_VALUE = (CSW_RESERVED | CSW_MSTRDBG | CSW_HPROT | CSW_DBGSTAT | CSW_SADDRINC
 
 class Port(blocks.RootBlock):
     _dynamicBinding = True
+    _attrs = 'port'
     
     def __new__(cls, mnemonic, port, addressBits, width, registers, bind=True, fullname=None, descr='-', kwattrs={}):
         return super(Port, cls).__new__(cls, mnemonic, addressBits, width, registers, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
@@ -86,16 +87,16 @@ class APRegister(components.Register):
 
 
 CSW = APRegister('CSW', 0, 0x00, 32,
-                 [components.BitField('PROT', 7, 24, fullname='Bus Access Protection Control', 
+                 [components.BitField('PROT', 24, 7, fullname='Bus Access Protection Control', 
                                       descr="""\
 This field enables the debugger to specify protection flags for a debug
 access."""),
-                  components.BitField('ADDRINC', 2, 4, fullname='Address Increment', 
+                  components.BitField('ADDRINC', 4, 2, fullname='Address Increment', 
                                        descr="""\
 Address auto-increment and packing mode. This field controls whether the access
 address increments automatically on read and write data accesses through the
 Data Read/Write Register."""),
-                  components.BitField('SIZE', 3, 0, 
+                  components.BitField('SIZE', 0, 3, 
                                        descr="Byte size of the access to perform")], 
                  fullname='Control Status Word',
                  descr="The CSW holds control and status information for the MEM-AP.")
@@ -161,17 +162,17 @@ The Identification Code Register is always present on all DP implementations. It
 provides identification information about the ARM Debug Interface.""")
 
 ABORT = DPRegister('ABORT', 0x00, 32, 
-                   [components.BitField('ORUNERRCLR', 1, 4, fullname='Overrun Error Clear', 
+                   [components.BitField('ORUNERRCLR', 4, 1, fullname='Overrun Error Clear', 
                                         descr="""\
 Write 1 to this bit to clear the STICKYORUN overrun error flag to 0."""),
-                    components.BitField('WDERRCLR', 1, 3, fullname='Write Data Error Clear', 
+                    components.BitField('WDERRCLR', 3, 1, fullname='Write Data Error Clear', 
                                         descr="""\
 Write 1 to this bit to clear the WDATAERR write data error flag to 0"""),
-                    components.BitField('STKERRCLR', 1, 2, fullname='Sticky Error Clear', descr="""\
+                    components.BitField('STKERRCLR', 2, 1, fullname='Sticky Error Clear', descr="""\
 Write 1 to this bit to clear the STICKYERR sticky error flag to 0."""),
                     components.BitField('STKCMPCLRa', 1, 1, fullname='Sticky Compare Error Clear', descr="""\
 Write 1 to this bit to clear the STICKYCMP sticky compare flag to 0."""),
-                    components.BitField('DAPABORT', 1, 0, fullname='DAP Abort', descr="""\
+                    components.BitField('DAPABORT', 0, 1, fullname='DAP Abort', descr="""\
 Write 1 to this bit to generate a DAP abort. This aborts the current AP
 transaction. Do this only if the debugger has received WAIT responses over an
 extended period.""")],
@@ -179,17 +180,17 @@ extended period.""")],
                    descr='The AP Abort Register')
 
 CTRLSTAT = DPRegister('CTRLSTAT', 0x04, 32, 
-                      [components.BitField('CSYSPWRUPACK', 1, 31, fullname='System Power Up Acknowledge'),
-                       components.BitField('CSYSPWRUPREQ', 1, 30, fullname='System Power Up Request'),
-                       components.BitField('CDBGPWRUPACK', 1, 29, fullname='Debug Power Up Acknowledge'),
-                       components.BitField('CDBGPWRUPREQ', 1, 28, fullname='Debug Power Up Request'),
-                       components.BitField('CDBGRSTACK', 1, 27, fullname='Debug Reset Acknowledge'),
-                       components.BitField('CDBGRSTREQ', 1, 26, fullname='Debug Reset Request'),
+                      [components.BitField('CSYSPWRUPACK', 31, 1, fullname='System Power Up Acknowledge'),
+                       components.BitField('CSYSPWRUPREQ', 30, 1, fullname='System Power Up Request'),
+                       components.BitField('CDBGPWRUPACK', 29, 1, fullname='Debug Power Up Acknowledge'),
+                       components.BitField('CDBGPWRUPREQ', 28, 1, fullname='Debug Power Up Request'),
+                       components.BitField('CDBGRSTACK', 27, 1, fullname='Debug Reset Acknowledge'),
+                       components.BitField('CDBGRSTREQ', 26, 1, fullname='Debug Reset Request'),
                        components.BitField('TRNCNT', 12, 12, fullname='Transaction Counter'),
-                       components.BitField('MASKLANE', 4, 8, descr="""\
+                       components.BitField('MASKLANE', 8, 4, descr="""\
 Indicates the bytes to be masked in pushed compare and pushed verify
 operations."""), 
-                       components.BitField('WDATAERR', 1, 7, fullname='Write Data Error', 
+                       components.BitField('WDATAERR', 7, 1, fullname='Write Data Error', 
                                            descr="""\
 This bit is set to 1 if a Write Data Error occurs. This happens if:
 
@@ -200,18 +201,18 @@ submitted to the AP.
 This bit can only be cleared to 0 by writing 1 to the WDERRCLR field of the AP
 Abort Register, see The AP Abort Register.  After a power-on
 reset this bit is 0."""),
-                       components.BitField('READOK', 1, 6, descr="""\
+                       components.BitField('READOK', 6, 1, descr="""\
 This bit is set to 1 if the response to the previous AP or RDBUFF read was
 OK. It is cleared to 0 if the response was not OK."""),
-                       components.BitField('STICKYERR', 1, 5, 
+                       components.BitField('STICKYERR', 5, 1, 
                                            descr="This bit is set to 1 if an error is returned by an AP transaction."),
-                       components.BitField('STICKYCMP', 1, 4, 
+                       components.BitField('STICKYCMP', 4, 1, 
                                            descr="""This bit is set to 1 when a match occurs on a pushed compare or a pushed verify operation."""),
                        components.BitField('TRNMODE', 2, 2, fullname='Transfer Mode', 
                                            descr="""This field sets the transfer mode for AP operations."""),
                        components.BitField('STICKYORUN', 1, 1, 
                                            descr="""If overrun detection is enabled, this bit is set to 1 when an overrun occurs."""),
-                       components.BitField('ORUNDETECT', 1, 0, fullname='Overrun Detect', 
+                       components.BitField('ORUNDETECT', 0, 1, fullname='Overrun Detect', 
                                            descr="""This bit is set to 1 to enable overrun detection.""")],
                       fullname='DP Control/Status',
                       descr="""\
@@ -219,8 +220,8 @@ The Control/Status Register is always present on all DP
 implementations. Its provides control of the DP, and status information about
 the DP.""")
 
-SELECT = DPRegister('SELECT', 32, 0x08,
-                    [components.BitField('APSEL', 8, 24, fullname='AP Select', 
+SELECT = DPRegister('SELECT', 0x08, 32,
+                    [components.BitField('APSEL', 24, 8, fullname='AP Select', 
                                          descr="Selects the current AP."),
                      components.BitField('APBANKSEL', 4, 4, fullname='AP Bank Select', 
                                          descr="Selects the active four-word register bank on the current AP")], 
@@ -231,7 +232,7 @@ main purpose is to select the current Access Port (AP) and the active four-word
 register bank within that AP.""")
 
 RESEND = DPRegister('RESEND', 0x08, 32, 
-                    [components.BitField('RESEND', 32, 0, 
+                    [components.BitField('RESEND', 0, 32, 
                                          descr="The value that was returned by the last AP read or DP RDBUFF read.")],
                     fullname='Read Resend',
                     descr="""\
@@ -241,7 +242,7 @@ transfer, without repeating the original AP transfer.""")
 
 
 DebugPort = Port('DP', 0, 8, 32, [IDCODE, ABORT, CTRLSTAT, SELECT, RESEND], 
-                         fullname='Debug Port', descr="""\
+                 fullname='Debug Port', descr="""\
 An ARM Debug Interface implementation includes a single Debug Port (DP), that provides the external
 physical connection to the interface. The ARM Debug Interface v5 specification supports two DP
 implementations:
@@ -292,12 +293,10 @@ class DAPLink(blocks.RootBlock):
         self.init()
 
     def init(self):
-        self.DP.SELECT.APBANKSEL = 0
-        self.DP.CTRLSTAT.CSYSPWRUPREQ = 1 
-        self.DP.CTRLSTAT.CDBGPWRUPREQ = 1
-        
-        mask = self.DP.CTRLSTAT.CSYSPWRUPACK._mask | self.DP.CTRLSTAT.CDBGPWRUPACK._mask
-        while self.DP.CTRLSTAT&mask != mask: None
+        self.DP.SELECT = 0
+        self.DP.CTRLSTAT = self.DP.CTRLSTAT.CSYSPWRUPREQ | self.DP.CTRLSTAT.CDBGPWRUPREQ
+        mask = self.DP.CTRLSTAT.CSYSPWRUPACK | self.DP.CTRLSTAT.CDBGPWRUPACK
+        while (self.DP.CTRLSTAT&mask) != mask: None
 
     def _line_reset(self):
         self._interface.write('1'*56)
@@ -323,19 +322,17 @@ class DAPLink(blocks.RootBlock):
     def read(self, port, address, bank=None):
         if bank is not None:
             self.DP.SELECT.APBANKSEL = bank
-        if self._transport.sendRequest(port, 1, address) == 2: 
-            time.sleep(0.1)
+        self._transport.sendRequest(port, 1, address)
         return self._transport.readPacket()
 
     def write(self, port, address, data, bank=None):
         if bank is not None:
             self.DP.SELECT.APBANKSEL = bank
-        if self._transport.sendRequest(port, 0, address) == 2: 
-            time.sleep(0.1)
+        self._transport.sendRequest(port, 0, address)
         self._transport.sendPacket(data)
 
     def memWrite(self, addr, data, accessSize=32):
-        self.DP.SELECT.APBANKSEL = 0
+        self.DP.SELECT = 0
         self.MEMAP.CSW = CSW_VALUE | accessSize >> 4
 
         if accessSize == 8:
@@ -347,7 +344,7 @@ class DAPLink(blocks.RootBlock):
         self.MEMAP.DRW = data
 
     def memRead(self, addr, accessSize=32):
-        self.DP.SELECT.APBANKSEL = 0
+        self.DP.SELECT = 0
         self.MEMAP.CSW = CSW_VALUE | accessSize >> 4
         self.MEMAP.TAR = addr
         resp = self.MEMAP.DRW.value

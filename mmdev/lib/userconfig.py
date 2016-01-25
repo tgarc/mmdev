@@ -107,7 +107,7 @@ class UserConfig(object):
         print "\n\nError opening cable driver (details below)\n%s\n" % self.dump()
 
     def getcable(self):
-        for prefix in ('pyOCD.cables.', ''):
+        for prefix in ('mmdev.cables.', ''):
             try:
                 modname = prefix + self.CABLE_DRIVER
                 return __import__(modname, globals(), locals(), ['Jtagger'])
