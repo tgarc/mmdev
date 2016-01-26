@@ -72,11 +72,12 @@ class LeafBlock(object):
 class Block(LeafBlock):
     _dynamicBinding = False
 
-    def __new__(cls, mnemonic, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
+    def __new__(cls, mnemonic, subblocks, *args, **kwargs):
+        bind = kwargs.get('bind', True)
         if cls._dynamicBinding and bind:
             mblk = dict(cls.__dict__)
         else:
-            mblk = super(Block, cls).__new__(cls, mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
+            mblk = super(Block, cls).__new__(cls, mnemonic, **kwargs)
 
         if not bind:
             return mblk
@@ -108,7 +109,7 @@ class Block(LeafBlock):
 
         if cls._dynamicBinding:
             newcls = type(cls.__name__, (cls,) + cls.__bases__, mblk)
-            return super(Block, newcls).__new__(newcls, mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
+            return super(Block, newcls).__new__(newcls, mnemonic, **kwargs)
         else:
             return mblk
 
@@ -226,10 +227,7 @@ class MemoryMappedBlock(Block):
     _subfmt="{address} {mnemonic}"
     _attrs = 'address'
 
-    def __new__(cls, mnemonic, address, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
-        return super(MemoryMappedBlock, cls).__new__(cls, mnemonic, subblocks, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
-
-    def __init__(self, mnemonic, address, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
+    def __init__(self, mnemonic, subblocks, address, bind=True, fullname=None, descr='-', kwattrs={}):
         super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
         self._address = utils.HexValue(address)
 
@@ -252,6 +250,31 @@ class MemoryMappedBlock(Block):
 
 
 class IOBlock(MemoryMappedBlock):
+    """
+    access
+    ------
+    'read-only': read access is permitted. Write operations have an undefined
+    result.
+    'write-only': write access is permitted. Read operations have an undefined
+    result.
+    'read-write': both read and write accesses are permitted. Writes affect
+    the state of the register and reads return a value related to the
+    register.
+    """
+    _attrs = 'access'
+    _fmt="{name} ({mnemonic}, {access}, {address})"
+
+
+    def __init__(self, mnemonic, subblocks, address, access='read-write', bind=True, fullname=None, descr='-', kwattrs={}):
+        super(IOBlock, self).__init__(mnemonic, subblocks, address, bind=bind,
+                                      fullname=fullname, descr=descr,
+                                      kwattrs=kwattrs)
+        self._access = access
+        if self._access == 'write-only':
+            self._read = lambda slf: 0
+        elif self._access == 'read-only':
+            self._write = lambda slf, x: None
+
     def _read(self):
         return
 
@@ -273,10 +296,7 @@ class IOBlock(MemoryMappedBlock):
 class RootBlock(Block):
     _attrs = 'width', 'addressBits'
 
-    def __new__(cls, mnemonic, addressBits, width, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
-        return super(RootBlock, cls).__new__(cls, mnemonic, subblocks, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
-
-    def __init__(self, mnemonic, addressBits, width, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
+    def __init__(self, mnemonic, subblocks, addressBits, width, bind=True, fullname=None, descr='-', kwattrs={}):
         super(RootBlock, self).__init__(mnemonic, subblocks, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
         self._width = width

@@ -2,11 +2,10 @@ from mmdev import blocks
 from mmdev import utils
 
 
+accessKeys = ['read', 'write', 'read-write']
+
 class CPU(blocks.LeafBlock):
     _attrs = 'revision', 'endian', 'mpuPresent', 'fpuPresent'
-
-    def __new__(cls, mnemonic, revision, endian, mpuPresent, fpuPresent, fullname=None, descr='-', kwattrs={}):
-        return super(CPU, cls).__new__(cls, mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
     def __init__(self, mnemonic, revision, endian, mpuPresent, fpuPresent, fullname=None, descr='-', kwattrs={}):
         super(CPU, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
@@ -19,22 +18,19 @@ class CPU(blocks.LeafBlock):
 class Peripheral(blocks.MemoryMappedBlock):
     _dynamicBinding = True
 
-    def __new__(cls, mnemonic, baseAddress, registers, bind=True,fullname=None, descr='-', kwattrs={}):
-        return super(Peripheral, cls).__new__(cls, mnemonic, baseAddress, registers, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
-
-    def __init__(self, mnemonic, baseAddress, registers, bind=True,fullname=None, descr='-', kwattrs={}):
-        super(Peripheral, self).__init__(mnemonic, baseAddress, registers, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    def __init__(self, mnemonic, registers, baseAddress, bind=True, fullname=None, descr='-', kwattrs={}):
+        super(Peripheral, self).__init__(mnemonic, registers, baseAddress, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
 
 class Register(blocks.IOBlock):
     _dynamicBinding = True
     _attrs = 'resetValue', 'resetMask', 'width'
 
-    def __new__(cls, mnemonic, address, width, fields, resetMask=0, resetValue=None, bind=True,fullname=None, descr='-', kwattrs={}):
-        return super(Register, cls).__new__(cls, mnemonic, address, fields, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
-
-    def __init__(self, mnemonic, address, width, fields, resetMask=0, resetValue=None, bind=True,fullname=None, descr='-', kwattrs={}):
-        super(Register, self).__init__(mnemonic, address, fields, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    def __init__(self, mnemonic, fields, address, width, resetMask=0,
+                 resetValue=None, access='read-write', bind=True, fullname=None,
+                 descr='-', kwattrs={}):
+        super(Register, self).__init__(mnemonic, fields, address, access=access,
+                                       bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
         if resetMask == 0:
             resetValue = 0
         self._width = width
@@ -78,11 +74,14 @@ class BitField(blocks.IOBlock):
     _subfmt="{mask} {mnemonic}"
     _attrs = 'mask', 'width'
 
-    def __new__(cls, mnemonic, offset, width, values=[], fullname=None, descr='-', kwattrs={}):
-        return super(BitField, cls).__new__(cls, mnemonic, offset, values, bind=False, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    def __new__(cls, mnemonic, offset, width, values=[], **kwargs):
+        return super(BitField, cls).__new__(cls, mnemonic, values, offset, bind=False, **kwargs)
 
-    def __init__(self, mnemonic, offset, width, values=[], fullname=None, descr='-', kwattrs={}):
-        super(BitField, self).__init__(mnemonic, offset, values, bind=False, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    def __init__(self, mnemonic, offset, width, values=[], access='read-write', fullname=None, descr='-', kwattrs={}):
+        super(BitField, self).__init__(mnemonic, values, offset, access=access,
+                                       bind=False, fullname=fullname,
+                                       descr=descr, kwattrs=kwattrs)
+
         self._mask = utils.HexValue(((1 << width) - 1) << offset)
         self._width = width
 
@@ -137,8 +136,8 @@ class EnumeratedValue(blocks.LeafBlock):
     _subfmt="{value} {mnemonic}"
     _attrs = 'value'
 
-    def __new__(cls, mnemonic, value, fullname=None, descr='-', kwattrs={}):
-        return super(EnumeratedValue, cls).__new__(cls, mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    def __new__(cls, mnemonic, value, **kwargs):
+        return super(EnumeratedValue, cls).__new__(cls, mnemonic, **kwargs)
 
     def __init__(self, mnemonic, value, fullname=None, descr='-', kwattrs={}):
         super(EnumeratedValue, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
