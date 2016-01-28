@@ -7,7 +7,7 @@ import json
 
 
 _bracketregex = re.compile('[\[\]]')
-_textwrap = textwrap.TextWrapper(drop_whitespace=True)
+_textwrap = textwrap.TextWrapper(width=70)
 
 
 class MetaBlock(type):
@@ -59,10 +59,10 @@ class LeafBlock(object):
         return { self._mnemonic: self.attrs }
 
     def _tree(self, d=-1, pfx=''):
-        return textwrap.fill(self._fmt.format(**self.attrs), subsequent_indent=pfx)
+        return textwrap.fill(self._fmt.format(**self.attrs), subsequent_indent=pfx, width=80)
 
     def summary(self):
-        descr = textwrap.fill(self._description, initial_indent=' '*4, subsequent_indent=' '*4)
+        descr = textwrap.fill(self._description, initial_indent=' '*4, subsequent_indent=' '*4, width=80)
         print self._typename + ' ' + self._fmt.format(**self.attrs) + '\n' + descr
 
     def __repr__(self):
@@ -117,7 +117,7 @@ class Block(LeafBlock):
         super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
         self._nodes = subblocks
-        for blk in self._nodes:
+        for blk in self:
             blk.root = blk.parent = self
         
         for blk in self.walk(l=2):
@@ -210,7 +210,7 @@ class Block(LeafBlock):
     def summary(self):
         super(Block, self).summary()
         for blk in self._nodes:
-            descr = textwrap.fill(blk._description, initial_indent=' '*10, subsequent_indent=' '*10)
+            descr = textwrap.fill(blk._description, initial_indent=' '*10, subsequent_indent=' '*10, width=80)
             print ' '*4 + '* ' + blk._fmt.format(**blk.attrs) + '\n' + descr
 
     def __repr__(self):
@@ -235,11 +235,11 @@ class MemoryMappedBlock(Block):
     def _key(self):
         return self._address
 
-    def __int__(self):
-        return int(self._key)
-
     def _set_width(self, width):
         self._address = utils.HexValue(self._address, width)
+
+    def __int__(self):
+        return int(self._key)
 
     def __repr__(self):
         return "<{:s} '{:s}' in {:s} '{:s}' at {}>".format(self._typename, 
@@ -248,18 +248,17 @@ class MemoryMappedBlock(Block):
                                                              self.parent._mnemonic, 
                                                              self._address)
 
+READ, WRITE, READWRITE = range(1,4)
+Access = dict(zip(('read-only', 'write-only', 'read-write'), (READ, WRITE, READWRITE)))
+    
 
 class IOBlock(MemoryMappedBlock):
     """
     access
     ------
-    'read-only': read access is permitted. Write operations have an undefined
-    result.
-    'write-only': write access is permitted. Read operations have an undefined
-    result.
-    'read-write': both read and write accesses are permitted. Writes affect
-    the state of the register and reads return a value related to the
-    register.
+    'read-only': read access is permitted. Write operations will be ignored.
+    'write-only': write access is permitted. Read operations will always return 0.
+    'read-write': both read and write accesses are permitted.
     """
     _attrs = 'access'
     _fmt="{name} ({mnemonic}, {access}, {address})"
@@ -270,24 +269,30 @@ class IOBlock(MemoryMappedBlock):
                                       fullname=fullname, descr=descr,
                                       kwattrs=kwattrs)
         self._access = access
-        if self._access == 'write-only':
-            self._read = lambda slf: 0
-        elif self._access == 'read-only':
-            self._write = lambda slf, x: None
+        if Access[self._access] & WRITE:
+            self.__write = self._write
+        if Access[self._access] & READ:
+            self.__read = self._read
 
-    def _read(self):
+    def __read(self):
+        return 0
+
+    def __write(self, value):
         return
 
+    def _read(self):
+        raise NotImplemented
+
     def _write(self, value):
-        return 
+        raise NotImplemented
 
     @property
     def value(self):
-        return utils.HexValue(self._read(), self._width)
+        return utils.HexValue(self.__read(), self._width)
 
     @value.setter
     def value(self, value):
-        self._write(value)
+        self.__write(value)
 
     def __set__(self, obj, value):
         self.value = value
@@ -301,7 +306,7 @@ class RootBlock(Block):
 
         self._width = width
         self._addressBits = addressBits
-        
+
         for blk in self.walk():
             if hasattr(blk, '_set_width'):
-                blk._set_width(self._width)
+                blk._set_width(blk.parent._width)

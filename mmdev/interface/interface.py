@@ -9,5 +9,5 @@ class Interface(object):
     def write(self, data, **kwargs):
         print "Interface <= 0x%x" % data
 
-    def read(self, rlen, **kwargs):
+    def read(self, *args, **kwargs):
         return 0

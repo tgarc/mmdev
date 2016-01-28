@@ -1,5 +1,7 @@
 from mmdev.transport import Transport
 import logging
+import time
+
 
 IDCODE = 0 << 2
 READ = 1 << 1
@@ -35,7 +37,7 @@ class SWD(Transport):
         # read 32bit word + 1 bit parity, and clock 1 additional cycle to
         # satisfy turnaround for next transmission
         x = self.interface.read(34)
-        logging.debug("RDATA %s (0x%08x)" % (x[31::-1], int(x[:31], base=2)))
+        logging.debug("RDATA %s (0x%08x)" % (x[31::-1], int(x[31::-1], base=2)))
         data, presp = int(x[31::-1], 2), int(x[32], 2)
 
         parity = data
@@ -46,7 +48,7 @@ class SWD(Transport):
         parity = (parity ^ (parity >> 1)) & 1
 
         if parity ^ presp:
-            raise Transport.TransferError("Parity Error")
+            raise Transport.TransportException("Parity Error")
 
         return data
 
@@ -70,7 +72,26 @@ class SWD(Transport):
         logging.debug('ACK %s' % ack[3:0:-1])
         ack = int(ack[3:0:-1],2)
 
-        if ack!=ACK_OK and ack!=ACK_WAIT:
-            raise Transport.TransferError('Received invalid ACK ({:#03b})'.format(ack))
+        tries = 0
+        while ack == ACK_WAIT and tries < 3:
+            time.sleep(0.1)
+            self.interface.read(1) # insert a turnaround before sending next request
+
+            logging.debug('RQST %s (apndp=%d, rnw=%d, a23=0x%x)' % (rqst, apndp, rnw, a23))
+            self.interface.write(rqst)
+
+            ack = self.interface.read(4)
+            logging.debug('ACK %s' % ack[3:0:-1])
+            ack = int(ack[3:0:-1],2)
+            tries += 1
+        if tries == 3:
+            raise Transport.TransferBusy("DAP stuck in WAIT state")
+
+        if ack==ACK_FAULT:
+            raise Transport.TransferFault('Target responded with FAULT error code')
+        elif ack==0b111:
+            raise Transport.TransferNoACK('No response from target.')
+        elif ack!=ACK_OK:
+            raise Transport.TransferInvalid('Received invalid ACK ({:#03b})'.format(ack))
 
         return ack

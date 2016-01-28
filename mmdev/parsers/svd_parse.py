@@ -144,7 +144,7 @@ class SVDParser(DeviceParser):
         descr      = _readtxt(regnode, 'description', required=True)
 
         size       = _readint(regnode, 'size', size, required=True)
-        access     = _readtxt(regnode, 'access', access)
+        access     = _readtxt(regnode, 'access', access, required=True)
         # protection = _readtxt(regnode, 'protection', protection)
         resetmask = _readint(regnode, 'resetMask', resetMask, parent=parent)
         resetvalue = _readint(regnode, 'resetValue', resetValue, 
@@ -156,8 +156,8 @@ class SVDParser(DeviceParser):
         dim = _readint(regnode, 'dim', parent=parent)
         if dim is None:
             return Register(name, bits, addr, size, resetMask=resetmask,
-                            resetValue=resetvalue, fullname=dispname,
-                            descr=descr, kwattrs=regnode)
+                            resetValue=resetvalue, access=access,
+                            fullname=dispname, descr=descr, kwattrs=regnode)
 
         diminc = _readint(regnode, 'dimIncrement', parent=parent, required=True)
         dimidx = _readtxt(regnode, 'dimIndex', parent=parent)
@@ -177,6 +177,7 @@ class SVDParser(DeviceParser):
                                    size,
                                    resetMask=resetmask, 
                                    resetValue=resetvalue,
+                                   access=access,
                                    fullname=dispname % idx if '%s' in dispname else dispname,
                                    descr=descr,
                                    kwattrs=regnode))
@@ -203,7 +204,7 @@ class SVDParser(DeviceParser):
             bit_offset=lsb
             bit_width=1+(msb-lsb)
 
-        access = _readtxt(bitnode, 'access', access)
+        access = _readtxt(bitnode, 'access', access, required=True)
         # modifiedWriteValues = _readtxt(bitnode, 'writeValueType')
         # writeConstraint = _readtxt(bitnode, 'writeConstraintType')
         # readAction = _readtxt(bitnode, 'readActionType')
@@ -219,7 +220,7 @@ class SVDParser(DeviceParser):
 
         enumvals = cls.parse_subblocks(enumvals, cls.parse_enumerated_value)
 
-        return BitField(name, bit_offset, bit_width, values=enumvals, descr=descr, kwattrs=bitnode)
+        return BitField(name, bit_offset, bit_width, values=enumvals, access=access, descr=descr, kwattrs=bitnode)
 
     @classmethod
     def parse_enumerated_value(cls, enumnode, parent={}):

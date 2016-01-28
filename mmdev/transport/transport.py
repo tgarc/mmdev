@@ -1,8 +1,17 @@
 class Transport(object):
-    class TransportError(Exception):
+    class TransportException(Exception):
         pass
 
-    class TransferError(Exception):
+    class TransferInvalid(TransportException):
+        pass
+
+    class TransferNoACK(TransportException):
+        pass
+
+    class TransferFault(TransportException):
+        pass
+
+    class TransferBusy(TransportException):
         pass
 
     def __init__(self, interface):

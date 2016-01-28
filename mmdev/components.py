@@ -2,8 +2,6 @@ from mmdev import blocks
 from mmdev import utils
 
 
-accessKeys = ['read', 'write', 'read-write']
-
 class CPU(blocks.LeafBlock):
     _attrs = 'revision', 'endian', 'mpuPresent', 'fpuPresent'
 
@@ -36,6 +34,29 @@ class Register(blocks.IOBlock):
         self._width = width
         self._resetValue = utils.HexValue(resetValue, width)
         self._resetMask = utils.HexValue(resetMask, width)
+
+    def status(self):
+        v = self.value
+
+        headerstr = self._fmt.format(**self.attrs)
+        substr = ''
+        for blk in self:
+            substr += "\n\t{} ({})".format(blk._subfmt.format(**blk.attrs), utils.HexValue((v&blk._mask) >> blk._address, blk._width))
+        print headerstr + substr if substr else headerstr
+
+    def pack(self, *args, **kwargs):
+        nodesdict = dict(self.items())
+        nodes = list((self._nodes[idx], v) for idx, v in enumerate(args)) 
+        nodes+= [(nodesdict[k.upper()], v) for k, v in kwargs.items()]
+
+        v = self.value
+        for f, a in nodes:
+            v = (v & ~f._mask) | ((a << f._address) & f._mask)
+        self.value = v
+
+    def unpack(self):
+        v = self.value
+        return tuple(utils.HexValue((v&f._mask) >> f._address, f._width) for f in self)
 
     def _read(self):
         return self.root.read(self._address, self._width)
@@ -70,7 +91,7 @@ class Register(blocks.IOBlock):
 
 
 class BitField(blocks.IOBlock):
-    _fmt = "{name} ({mnemonic}, {mask})"
+    _fmt = "{name} ({mnemonic}, {access}, {mask})"
     _subfmt="{mask} {mnemonic}"
     _attrs = 'mask', 'width'
 
@@ -97,7 +118,8 @@ class BitField(blocks.IOBlock):
 
     # notice that writing a bitfield requires a read of the register first
     def _write(self, value):
-        self.parent.value = (self.parent.value & ~self._mask) | (value << self._address)
+        self.parent.value = (self.parent.value & ~self._mask) | ((value << self._address) & self._mask)
+
 
     def __invert__(self):
         return ~self._key
@@ -142,6 +164,9 @@ class EnumeratedValue(blocks.LeafBlock):
     def __init__(self, mnemonic, value, fullname=None, descr='-', kwattrs={}):
         super(EnumeratedValue, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
         self._value = utils.HexValue(value)
+
+    def _set_width(self, width):
+        self._value = utils.HexValue(self._value, width)
 
     @property
     def _key(self):

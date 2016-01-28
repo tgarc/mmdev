@@ -50,39 +50,41 @@ class Port(blocks.RootBlock):
     
     def __init__(self, mnemonic, registers, port, addressBits, width, bind=True, fullname=None, descr='-', kwattrs={}):
         super(Port, self).__init__(mnemonic, registers, addressBits, width, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
-        self._port = port
+        self._port = utils.HexValue(port)
 
     @property
     def _key(self):
         return self._port
 
+    def _set_width(self, width):
+        self._port = utils.HexValue(self._port, width)
+
 
 class DPRegister(components.Register):
 
     def _read(self):
-        return self.root.read(self.parent._port, self._address)
+        return self.root.readDP(self._address)
 
     def _write(self, value):
-        return self.root.write(self.parent._port, self._address, value)
+        return self.root.writeDP(self._address, value)
 
 
 class APRegister(components.Register):
     _attrs = 'bank'
 
-    def __init__(self, mnemonic, fields, bank, address, width, 
-                 access='read-write', bind=True, fullname=None, descr='-',
-                 kwattrs={}):
+    def __init__(self, mnemonic, fields, address, width, access='read-write',
+                 bind=True, fullname=None, descr='-', kwattrs={}):
         super(APRegister, self).__init__(mnemonic, fields, address, width,
                                          access=access, bind=bind,
                                          fullname=fullname, descr=descr,
                                          kwattrs=kwattrs)
-        self._bank = bank
-
+        self._bank = utils.HexValue((address&0xF0) >> 4, bitwidth=4)
+        
     def _read(self):
-        return self.root.read(self.parent._port, self._address, bank=self._bank)
+        return self.root.readAP(self._bank, self._address&0xF, port=self.parent._port)
 
     def _write(self, value):
-        return self.root.write(self.parent._port, self._address, value, bank=self._bank)
+        return self.root.writeAP(self._bank, self._address&0xF, value, port=self.parent._port)
 
 
 CSW = APRegister('CSW', 
@@ -97,12 +99,12 @@ address increments automatically on read and write data accesses through the
 Data Read/Write Register."""),
                   components.BitField('SIZE', 0, 3, 
                                        descr="Byte size of the access to perform")], 
-                 0, 0x00, 32,
+                 0x00, 32,
                  access='read-write',
                  fullname='Control Status Word',
                  descr="The CSW holds control and status information for the MEM-AP.")
 
-DRW = APRegister('DRW', [], 0, 0x00, 32,
+DRW = APRegister('DRW', [], 0x0C, 32,
                  access='read-write',
                  fullname='Data Read/Write',
                  descr="""\
@@ -111,7 +113,7 @@ The DRW is used for memory accesses:
 2) Reading from the DRW initiates a read from the address specified by the
 TAR. When the read access completes, the value is returned from the DRW.""")
 
-TAR = APRegister('TAR', [], 0, 0x04, 32, 
+TAR = APRegister('TAR', [], 0x04, 32, 
                  access='read-write',
                  fullname='Transfer Address Register',
                  descr="""\
@@ -120,7 +122,7 @@ of debug resources, connected to the MEM-AP. The MEM-AP can be configured so
 that the TAR is incremented automatically after each memory access. Reading or
 writing to the TAR does not cause a memory access.""")
 
-IDR = APRegister('IDR', [], 0x0F, 0xFC, 32, 
+IDR = APRegister('IDR', [], 0xFC, 32, 
                  access='read-only',
                  fullname='Identification Register', 
                  descr="""\
@@ -128,7 +130,7 @@ The Identification Register identifies the Access Port. It is a read-only
 register, implemented in the last word of the AP register space, at offset 0xFC.
 An IDR of zero indicates that no AP is present.""")
 
-MemoryAccessPort = Port('MEMAP', [CSW, TAR, DRW, IDR], 1, 8, 32, 
+MemoryAccessPort = Port('MEMAP', [CSW, TAR, DRW, IDR], 0, 32, 8, 
                         fullname='Memory Access Port', descr="""\
 A MEM-AP provides a DAP with access to a memory subsystem. Another way of
 describing the operation of a MEM-AP is that:
@@ -235,7 +237,15 @@ SELECT = DPRegister('SELECT',
                     [components.BitField('APSEL', 24, 8, fullname='AP Select', 
                                          descr="Selects the current AP."),
                      components.BitField('APBANKSEL', 4, 4, fullname='AP Bank Select', 
-                                         descr="Selects the active four-word register bank on the current AP")],
+                                         descr="Selects the active four-word register bank on the current AP"),
+                     components.BitField('CTRLSEL', 0, 1, 
+                                         [components.EnumeratedValue('CTRLSEL', 0, descr='Control Status Register'),
+                                          components.EnumeratedValue('CTRLSEL', 1, descr='Wire Control Register')],
+                                         fullname='CTRL Select', 
+                                         descr="""\
+SW-DP Debug Port address bank select. Controls which DP register is selected at
+address b01 on a SW-DP.""")
+                    ],
                     0x08, 32,
                     access='write-only',
                     fullname='Select',
@@ -251,12 +261,16 @@ RESEND = DPRegister('RESEND',
                     access='read-only',
                     fullname='Read Resend',
                     descr="""\
-The Read Resend Register is always present on any SW-DP implementation. Its
-purpose is to enable the read data to be recovered from a corrupted debugger
-transfer, without repeating the original AP transfer.""")
+Performing a read to the RESEND register does not capture new data from the
+AP. It returns the value that was returned by the last AP read or DP RDBUFF
+read.  Reading the RESEND register enables the read data to be recovered from a
+corrupted SW transfer without having to re-issue the original read request or
+generate a new access to the connected debug memory system.  The RESEND register
+can be accessed multiple times. It always return the same value until a new
+access is made to the DP RDBUFF register or to an AP register.""")
 
 
-DebugPort = Port('DP', [IDCODE, ABORT, CTRLSTAT, SELECT, RESEND], 0, 8, 32, 
+DebugPort = Port('DP', [IDCODE, ABORT, CTRLSTAT, SELECT, RESEND, WCR, RDBUFF], 0, 32, 2,
                  fullname='Debug Port', descr="""\
 An ARM Debug Interface implementation includes a single Debug Port (DP), that provides the external
 physical connection to the interface. The ARM Debug Interface v5 specification supports two DP
@@ -274,17 +288,20 @@ features. In particular, each implementation provides:
 3) A means of aborting a register access that appears to have faulted.""")
 
 
+# DAP = blocks.RootBlock('DAP', [DebugPort, MemoryAccessPort], 1, 1, fullname='Debug Access Port')
+
+
 class DAPLink(blocks.RootBlock):
     MEMAP = MemoryAccessPort
     DP = DebugPort
 
     def __new__(cls, transport=Transport, interface=None):
-        return super(DAPLink, cls).__new__(cls, 'DAP', [cls.MEMAP, cls.DP], 8,
-                                           32, fullname='Debug Access Port',
+        return super(DAPLink, cls).__new__(cls, 'DAP', [cls.MEMAP, cls.DP], 1,
+                                           1, fullname='Debug Access Port',
                                            bind=False)
 
     def __init__(self, transport=Transport, interface=None):
-        super(DAPLink, self).__init__('DAP', [self.MEMAP,self.DP], 8, 32,
+        super(DAPLink, self).__init__('DAP', [self.MEMAP,self.DP], 1, 1,
                                       fullname='Debug Access Port', bind=False)
         if interface is None:
             interface = Interface()
@@ -311,17 +328,31 @@ class DAPLink(blocks.RootBlock):
         self.DP.CTRLSTAT = self.DP.CTRLSTAT.CSYSPWRUPREQ | self.DP.CTRLSTAT.CDBGPWRUPREQ
         mask = self.DP.CTRLSTAT.CSYSPWRUPACK | self.DP.CTRLSTAT.CDBGPWRUPACK
         while (self.DP.CTRLSTAT&mask) != mask: None
+        
 
     def _line_reset(self):
         self._interface.write('1'*56)
 
-    def reset(self):
-        self._line_reset()
-        # switch from jtag to swd
-        self._JTAG2SWD()
-        # clear errors
+    def clear(self):
         self.DP.ABORT = 0x1F
 
+    def reset(self):
+        # Perform a connect/reset sequence
+        self._line_reset()
+
+        # switch from jtag to swd
+        self._JTAG2SWD()
+
+        # clear errors
+        self.clear()
+
+        # Reset CTRL flags to default values
+        self.DP.CTRLSTAT.MASKLANE = 0xF
+        self.DP.CTRLSTAT.TRNMODE = 0
+
+        # Reset the AP, AP bank, and CTRLSEL to their default
+        self.DP.SELECT = 0
+        
     def _JTAG2SWD(self):
         # send the 16bit JTAG-to-SWD sequence
         self._interface.write(reverse_bits(0x9EE7,w=16))
@@ -331,44 +362,85 @@ class DAPLink(blocks.RootBlock):
         self._interface.write('0'*8)
 
         # read ID code to confirm synchronization
-        logging.info('IDCODE: 0x%X', self.DP.IDCODE.value)
+        logging.info('IDCODE: %s', self.DP.IDCODE.value)
 
-    def read(self, port, address, bank=None):
-        if bank is not None:
-            self.DP.SELECT.APBANKSEL = bank
-        self._transport.sendRequest(port, 1, address)
+    def readDP(self, address):
+        self._transport.sendRequest(0, 1, address)
         return self._transport.readPacket()
 
-    def write(self, port, address, data, bank=None):
-        if bank is not None:
-            self.DP.SELECT.APBANKSEL = bank
-        self._transport.sendRequest(port, 0, address)
+    def writeDP(self, address, data):
+        self._transport.sendRequest(0, 0, address)
         self._transport.sendPacket(data)
+
+    def readAP(self, bank, address, port=0):
+        apsel = self.DP.SELECT.APSEL.value
+        banksel = self.DP.SELECT.APBANKSEL.value
+
+        if apsel != port:
+            self.DP.SELECT.APSEL = port
+        if banksel != bank:
+            self.DP.SELECT.APBANKSEL = bank
+
+        try:
+            self._transport.sendRequest(1, 1, address)
+        except Transport.TransferFault:
+            self.DP.ABORT.STKERRCLR = 1
+            raise
+
+        r = self._transport.readPacket()
+
+        if apsel != port:
+            self.DP.SELECT.APSEL = apsel
+        if banksel != bank:
+            self.DP.SELECT.APBANKSEL = banksel
+
+        return r
+
+    def writeAP(self, bank, address, data, port=0):
+        apsel = self.DP.SELECT.APSEL.value
+        banksel = self.DP.SELECT.APBANKSEL.value
+
+        if apsel != port:
+            self.DP.SELECT.APSEL = port
+        if banksel != bank:
+            self.DP.SELECT.APBANKSEL = bank
+
+        try:
+            self._transport.sendRequest(1, 0, address)
+        except Transport.TransferFault:
+            self.DP.ABORT.STKERRCLR = 1
+            raise
+
+        self._transport.sendPacket(data)
+
+        if apsel != port:
+            self.DP.SELECT.APSEL = apsel
+        if banksel != bank:
+            self.DP.SELECT.APBANKSEL = banksel
 
     def memWrite(self, addr, data, accessSize=32):
         self.DP.SELECT = 0
-        self.MEMAP.CSW = CSW_VALUE | accessSize >> 4
+        self.MEMAP.CSW = 0x23000052 | accessSize >> 4
+        self.MEMAP.TAR = addr
 
         if accessSize == 8:
-            data = data << ((addr & 0x03) << 3)
+            self.MEMAP.DRW = data << ((addr & 0x03) << 3)
         elif accessSize == 16:
-            data = data << ((addr & 0x02) << 3)
-
-        self.MEMAP.TAR = addr
-        self.MEMAP.DRW = data
+            self.MEMAP.DRW = data << ((addr & 0x02) << 3)
+        else:
+            self.MEMAP.DRW = data
 
     def memRead(self, addr, accessSize=32):
         self.DP.SELECT = 0
-        self.MEMAP.CSW = CSW_VALUE | accessSize >> 4
+        self.MEMAP.CSW = 0x23000052 | accessSize >> 4
         self.MEMAP.TAR = addr
-        resp = self.MEMAP.DRW.value
 
         if accessSize == 8:
-            resp = (resp >> ((addr & 0x03) << 3) & 0xff)
+            return self.MEMAP.DRW.value >> ((addr & 0x03) << 3) & 0xff
         elif accessSize == 16:
-            resp = (resp >> ((addr & 0x02) << 3) & 0xffff)
-
-        return resp
+            return self.MEMAP.DRW.value >> ((addr & 0x02) << 3) & 0xffff
+        else:
+            return self.MEMAP.DRW.value
 
     def disconnect(self):
         try:
