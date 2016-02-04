@@ -1,12 +1,11 @@
 from mmdev.jtag.discover import Chain
-from mmdev.interface import Interface
+from mmdev.datalink import DataLink
 from mmdev.utils import HexValue
 
 
-class FTD2xx(Interface):
+class FTD2xx(DataLink):
 
     def __init__(self, config):
-        super(FTD2xx, self).__init__()
         self.config = config
         self.driver = None
 

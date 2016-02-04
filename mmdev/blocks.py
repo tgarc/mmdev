@@ -22,10 +22,32 @@ class MetaBlock(type):
 
 
 class LeafBlock(object):
+    """
+    A generic node object that can have ancestors but no descendant nodes.
+
+    Parameters
+    ----------
+    mnemonic : str
+        Shorthand or abbreviated name of block.
+    fullname : str
+        Expanded name or display name of block.
+    descr : str
+        A string describing functionality, usage, and other relevant notes about
+        the block.
+
+    Attributes
+    ----------
+    parent : LeafBlock
+        Block node that owns this block.
+    root : LeafBlock
+        Block node that is at the root of the device tree.        
+    attrs : dict
+        A dict of all metadata available for this block.
+    """
     __metaclass__ = MetaBlock
 
+    _macrokey = 'mnemonic'
     _fmt="{name} ({mnemonic})"
-    _subfmt="{typename} {mnemonic}"
     _attrs = 'mnemonic', 'name', 'description', 'typename'
     
     def __init__(self, mnemonic, fullname=None, descr='-', kwattrs={}):
@@ -39,12 +61,16 @@ class LeafBlock(object):
         self.__doc__ = _textwrap.fill(self._description)
 
     @property
-    def _typename(self):
-        return self.__class__.__name__
+    def _macrovalue(self):
+        return getattr(self, '_'+self._macrokey)
+
+    @_macrovalue.setter
+    def _macrovalue(self, value):
+        setattr(self, '_'+self._macrokey, value)
 
     @property
-    def _key(self):
-        return self._mnemonic
+    def _typename(self):
+        return self.__class__.__name__
 
     @property
     def attrs(self):
@@ -63,13 +89,32 @@ class LeafBlock(object):
 
     def summary(self):
         descr = textwrap.fill(self._description, initial_indent=' '*4, subsequent_indent=' '*4, width=80)
-        print self._typename + ' ' + self._fmt.format(**self.attrs) + '\n' + descr
+        print '<' + self._typename + '>' + ' ' + self._fmt.format(**self.attrs) + '\n' + descr
 
     def __repr__(self):
         return "<{:s} '{:s}'>".format(self._typename, self._mnemonic)
 
 
 class Block(LeafBlock):
+    """
+    A generic container node object in a device tree. Has list and dict like
+    functionality for accessing direct children blocks.
+
+    Parameters
+    ----------
+    mnemonic : str
+        Shorthand or abbreviated name of block.
+    subblocks : list-like
+        All the children of this block.
+    bind : bool
+        Tells the constructor whether or not to bind the subblocks as attributes
+        of the Block instance.
+    fullname : str
+        Expanded name or display name of block.
+    descr : str
+        A string describing functionality, usage, and other relevant notes about
+        the block.
+    """
     _dynamicBinding = False
 
     def __new__(cls, mnemonic, subblocks, *args, **kwargs):
@@ -116,14 +161,11 @@ class Block(LeafBlock):
     def __init__(self, mnemonic, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
         super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
 
-        self._nodes = subblocks
+        self._nodes = list(subblocks)
         for blk in self:
-            blk.root = blk.parent = self
-        
-        for blk in self.walk(l=2):
-            blk.root = self
+            blk.parent = self
 
-        self._nodes.sort(key=lambda x: x._key, reverse=True)
+        self._nodes.sort(key=lambda x: x._macrovalue, reverse=True)
 
     def __len__(self):
         return len(self._nodes)
@@ -200,11 +242,11 @@ class Block(LeafBlock):
         return treestr
 
     def tree(self, depth=2):
-        print self._typename + ' ' + self._tree(d=depth)
+        print '<' + self._typename + '>' + ' ' + self._tree(d=depth, pfx=' '*(len(self._typename)+3))
 
     def ls(self):
         headerstr = self._fmt.format(**self.attrs)
-        substr = "\n\t".join([blk._subfmt.format(**blk.attrs) for blk in self._nodes])
+        substr = "\n\t".join([("{%s} {mnemonic}" % blk._macrokey).format(**blk.attrs) for blk in self._nodes])
         print headerstr + '\n\t' + substr if substr else headerstr
 
     def summary(self):
@@ -223,23 +265,45 @@ class Block(LeafBlock):
 
 
 class MemoryMappedBlock(Block):
-    _fmt="{name} ({mnemonic}, {address})"
-    _subfmt="{address} {mnemonic}"
-    _attrs = 'address'
+    """
+    Models a generic hardware block that is mapped into a memory
+    space. Instances of this class serve mostly as an abstraction that
+    encapsulate groups of lower level, typically read/writable hardware blocks.
 
-    def __init__(self, mnemonic, subblocks, address, bind=True, fullname=None, descr='-', kwattrs={}):
+    *Note*
+    A MemoryMappedBlock 'address' only implies that the block is embedded in an
+    address space. It us up to the parent block to define the address space.
+    See ``DeviceBlock`` for an example.
+
+    Parameters
+    ----------
+    mnemonic : str
+        Shorthand or abbreviated name of block.
+    subblocks : list-like
+        All the children of this block.
+    address : int
+        The absolute address of this block.
+    size : int
+        Specifies the size of the address region being covered by this block in
+        some arbitrary units (typically bytes). The end address of an address
+        block results from the sum of address and (size - 1).
+    bind : bool
+        Tells the constructor whether or not to bind subblocks as attributes of
+        the Block instance.
+    fullname : str
+        Expanded name or display name of block.
+    descr : str
+        A string describing functionality, usage, and other relevant notes about
+        the block.
+    """
+    _fmt="{name} ({mnemonic}, {address})"
+    _attrs = 'address', 'size'
+    _macrokey = 'address'
+
+    def __init__(self, mnemonic, subblocks, address, size, bind=True, fullname=None, descr='-', kwattrs={}):
         super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
         self._address = utils.HexValue(address)
-
-    @property
-    def _key(self):
-        return self._address
-
-    def _set_width(self, width):
-        self._address = utils.HexValue(self._address, width)
-
-    def __int__(self):
-        return int(self._key)
+        self._size = size
 
     def __repr__(self):
         return "<{:s} '{:s}' in {:s} '{:s}' at {}>".format(self._typename, 
@@ -254,18 +318,45 @@ Access = dict(zip(('read-only', 'write-only', 'read-write'), (READ, WRITE, READW
 
 class IOBlock(MemoryMappedBlock):
     """
-    access
-    ------
-    'read-only': read access is permitted. Write operations will be ignored.
-    'write-only': write access is permitted. Read operations will always return 0.
-    'read-write': both read and write accesses are permitted.
+    Models a generic memory mapped hardware block that can be read and/or
+    written to through a root Block's interface. This block just defines the
+    address and size of a read/write - the IO implementation details are decided
+    by the root block.
+
+    Parameters
+    ----------
+    mnemonic : str
+        Shorthand or abbreviated name of block.
+    subblocks : list-like
+        All the children of this block.
+    address : int
+        The absolute address of this block.
+    size : int
+        The number of data bits in this block.
+    access : access-type (str)
+        Describes the read/write permissions for this block.
+        'read-only': 
+            read access is permitted. Write operations will be ignored.
+        'write-only': 
+            write access is permitted. Read operations on this block will always return 0.
+        'read-write': 
+            both read and write accesses are permitted.
+    bind : bool
+        Tells the constructor whether or not to bind the subblocks as attributes
+        of the Block instance.
+    fullname : str
+        Expanded name or display name of block.
+    descr : str
+        A string describing functionality, usage, and other relevant notes about
+        the block.
     """
     _attrs = 'access'
     _fmt="{name} ({mnemonic}, {access}, {address})"
 
 
-    def __init__(self, mnemonic, subblocks, address, access='read-write', bind=True, fullname=None, descr='-', kwattrs={}):
-        super(IOBlock, self).__init__(mnemonic, subblocks, address, bind=bind,
+    def __init__(self, mnemonic, subblocks, address, size, access='read-write',
+                 bind=True, fullname=None, descr='-', kwattrs={}):
+        super(IOBlock, self).__init__(mnemonic, subblocks, address, size, bind=bind,
                                       fullname=fullname, descr=descr,
                                       kwattrs=kwattrs)
         self._access = access
@@ -274,6 +365,10 @@ class IOBlock(MemoryMappedBlock):
         if Access[self._access] & READ:
             self.__read = self._read
 
+        # purely for readability, set the data width for child blocks
+        for blk in self:
+            blk._macrovalue = utils.HexValue(blk._macrovalue, self._size)
+
     def __read(self):
         return 0
 
@@ -281,32 +376,95 @@ class IOBlock(MemoryMappedBlock):
         return
 
     def _read(self):
-        raise NotImplemented
+        return self.root._read(self._address, self._size)
 
     def _write(self, value):
-        raise NotImplemented
+        return self.root._write(self._address, value, self._size)
 
     @property
     def value(self):
-        return utils.HexValue(self.__read(), self._width)
+        return utils.HexValue(self.__read(), self._size)
 
     @value.setter
     def value(self, value):
         self.__write(value)
 
     def __set__(self, obj, value):
-        self.value = value
+        if value is not None:
+            self.value = value
+
+    def __invert__(self):
+        return ~self.value
+
+    def __lshift__(self, other):
+        return self.value << other
+    def __rshift__(self, other):
+        return self.value >> other
+    def __and__(self, other):
+        return self.value & other
+    def __xor__(self, other):
+        return self.value ^ other
+    def __or__(self, other):
+        return self.value | other
+
+    def __rlshift__(self, other):
+        return self.value << other
+    def __rrshift__(self, other):
+        return self.value >> other
+    def __rand__(self, other):
+        return self.value & other
+    def __rxor__(self, other):
+        return self.value ^ other
+    def __ror__(self, other):
+        return self.value | other
 
 
-class RootBlock(Block):
-    _attrs = 'width', 'addressBits'
+class DeviceBlock(Block):
+    """
+    Models a generic hardware block that defines a single memory address space
+    and its data bus.
 
-    def __init__(self, mnemonic, subblocks, addressBits, width, bind=True, fullname=None, descr='-', kwattrs={}):
-        super(RootBlock, self).__init__(mnemonic, subblocks, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    A few notes about the usage of this block:
 
-        self._width = width
-        self._addressBits = addressBits
+    1) This block does not impose any structure on the device tree;
+       it's even possible that this block has a parent. 
+    2) This block has no idea about the phyical `link` through which it is
+       connected, or the transport by which data it is sent.
 
-        for blk in self.walk():
-            if hasattr(blk, '_set_width'):
-                blk._set_width(blk.parent._width)
+    Parameters
+    ----------
+    mnemonic : str
+        Shorthand or abbreviated name of block.
+    subblocks : list-like
+        All the children of this block.
+    lane_width : int
+        Defines the number of data bits uniquely selected by each address. For
+        example, a value of 8 denotes that the device is byte-addressable.
+    bus_width : int
+        Defines the bit-width of the maximum single data transfer supported by
+        the bus infrastructure. For example, a value of 32 denotes that the
+        device bus can transfer a maximum of 32 bits in a single transfer.
+    bind : bool
+        Tells the constructor whether or not to bind the subblocks as attributes
+        of the Block instance.
+    fullname : str
+        Expanded name or display name of block.
+    descr : str
+        A string describing functionality, usage, and other relevant notes about
+        the block.
+    """
+    _attrs = 'lane_width', 'bus_width'
+
+    def __init__(self, mnemonic, subblocks, lane_width, bus_width, 
+                 bind=True, fullname=None, descr='-', kwattrs={}):
+        super(DeviceBlock, self).__init__(mnemonic, subblocks, 
+                                          bind=bind, fullname=fullname,
+                                          descr=descr, kwattrs=kwattrs)
+        self._lane_width = lane_width
+        self._bus_width = bus_width
+
+    def _read(self, address, size):
+        raise NotImplementedError
+
+    def _write(self, address, value, size):
+        raise NotImplementedError

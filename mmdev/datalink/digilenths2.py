@@ -1,5 +1,5 @@
 from mmdev.lib.userconfig import UserConfig
-from mmdev.interface import FTD2xx
+from ftd2xx import FTD2xx
 
 digilent_cfg = UserConfig()
 digilent_cfg.FTDI_GPIO_MASK = 0x60a3

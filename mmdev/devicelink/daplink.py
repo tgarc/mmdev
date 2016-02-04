@@ -1,6 +1,6 @@
 from mmdev import blocks, components
 from mmdev.transport import Transport
-from mmdev.interface import Interface
+import devicelink
 import mmdev.utils as utils
 import logging
 from operator import attrgetter
@@ -44,67 +44,30 @@ CSW_RESERVED =  0x01000000
 CSW_VALUE = (CSW_RESERVED | CSW_MSTRDBG | CSW_HPROT | CSW_DBGSTAT | CSW_SADDRINC)
 
 
-class Port(blocks.RootBlock):
-    _dynamicBinding = True
-    _attrs = 'port'
-    
-    def __init__(self, mnemonic, registers, port, addressBits, width, bind=True, fullname=None, descr='-', kwattrs={}):
-        super(Port, self).__init__(mnemonic, registers, addressBits, width, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
-        self._port = utils.HexValue(port)
-
-    @property
-    def _key(self):
-        return self._port
-
-    def _set_width(self, width):
-        self._port = utils.HexValue(self._port, width)
-
-
-class DPRegister(components.Register):
-
-    def _read(self):
-        return self.root.readDP(self._address)
-
-    def _write(self, value):
-        return self.root.writeDP(self._address, value)
-
-
-class APRegister(components.Register):
-    _attrs = 'bank'
-
-    def __init__(self, mnemonic, fields, address, width, access='read-write',
-                 bind=True, fullname=None, descr='-', kwattrs={}):
-        super(APRegister, self).__init__(mnemonic, fields, address, width,
-                                         access=access, bind=bind,
-                                         fullname=fullname, descr=descr,
-                                         kwattrs=kwattrs)
-        self._bank = utils.HexValue((address&0xF0) >> 4, bitwidth=4)
-        
-    def _read(self):
-        return self.root.readAP(self._bank, self._address&0xF, port=self.parent._port)
-
-    def _write(self, value):
-        return self.root.writeAP(self._bank, self._address&0xF, value, port=self.parent._port)
-
-
-CSW = APRegister('CSW', 
+CSW = components.Register('CSW', 
                  [components.BitField('PROT', 24, 7, fullname='Bus Access Protection Control', 
                                       descr="""\
 This field enables the debugger to specify protection flags for a debug
 access."""),
-                  components.BitField('ADDRINC', 4, 2, fullname='Address Increment', 
-                                       descr="""\
+                  components.BitField('ADDRINC', 4, 2, 
+                                      [components.EnumeratedValue('ADDRINC', 0, descr="Auto-increment off Always."),
+                                       components.EnumeratedValue('ADDRINC', 1, descr="Increment single Always."),
+                                       components.EnumeratedValue('ADDRINC', 2, descr="""\
+Increment packed If Packed transfers are supported. When Packed transfers are
+not supported, value b10 is Reserved.""")],
+                                      fullname='Address Increment', 
+                                      descr="""\
 Address auto-increment and packing mode. This field controls whether the access
 address increments automatically on read and write data accesses through the
-Data Read/Write Register."""),
+Data Read/Write components.Register."""),
                   components.BitField('SIZE', 0, 3, 
-                                       descr="Byte size of the access to perform")], 
+                                      descr="Byte size of the access to perform")], 
                  0x00, 32,
                  access='read-write',
                  fullname='Control Status Word',
                  descr="The CSW holds control and status information for the MEM-AP.")
 
-DRW = APRegister('DRW', [], 0x0C, 32,
+DRW = components.Register('DRW', [], 0x0C, 32,
                  access='read-write',
                  fullname='Data Read/Write',
                  descr="""\
@@ -113,46 +76,34 @@ The DRW is used for memory accesses:
 2) Reading from the DRW initiates a read from the address specified by the
 TAR. When the read access completes, the value is returned from the DRW.""")
 
-TAR = APRegister('TAR', [], 0x04, 32, 
+TAR = components.Register('TAR', [], 0x04, 32, 
                  access='read-write',
-                 fullname='Transfer Address Register',
+                 fullname='Transfer Address components.Register',
                  descr="""\
 The TAR holds the address for the next access to the memory system, or set
 of debug resources, connected to the MEM-AP. The MEM-AP can be configured so
 that the TAR is incremented automatically after each memory access. Reading or
 writing to the TAR does not cause a memory access.""")
 
-IDR = APRegister('IDR', [], 0xFC, 32, 
+IDR = components.Register('IDR', [], 0xFC, 32, 
                  access='read-only',
-                 fullname='Identification Register', 
+                 fullname='Identification components.Register', 
                  descr="""\
-The Identification Register identifies the Access Port. It is a read-only
+The Identification components.Register identifies the Access Port. It is a read-only
 register, implemented in the last word of the AP register space, at offset 0xFC.
 An IDR of zero indicates that no AP is present.""")
 
-MemoryAccessPort = Port('MEMAP', [CSW, TAR, DRW, IDR], 0, 32, 8, 
-                        fullname='Memory Access Port', descr="""\
-A MEM-AP provides a DAP with access to a memory subsystem. Another way of
-describing the operation of a MEM-AP is that:
-
-1) A debug component implements a memory-mapped abstraction of a set of resources.
-2) The MEM-AP provides AP access to those resources.
-
-However, an access to a MEM-AP might only access a register within the MEM-AP,
-without generating a memory access.""")
-
-
-WCR = DPRegister('WCR', [], 0x04, 32,
+WCR = components.Register('WCR', [], 0x04, 32,
                  access='read-write',
-                 fullname='Wire Control Register',
+                 fullname='Wire Control components.Register',
                  descr="""\
-The Wire Control Register is always present on any SW-DP implementation. Its
+The Wire Control components.Register is always present on any SW-DP implementation. Its
 purpose is to select the operating mode of the physical serial port connection
 to the SW-DP. On a SW-DP, the WCR is a read/write register at address 0x4 on
-read and write operations when the CTRLSEL bit in the Select Register is set to
+read and write operations when the CTRLSEL bit in the Select components.Register is set to
 1.""")
 
-RDBUFF = DPRegister('RDBUFF', [], 0x0C, 32,
+RDBUFF = components.Register('RDBUFF', [], 0x0C, 32,
                     access='read-only',
                     fullname='Read Buffer',
                     descr="""\
@@ -163,14 +114,14 @@ last AP read access, without generating a new AP access. After you have read
 the Read Buffer, its contents are no longer valid. The result of a second read
 of the Read Buffer is UNPREDICTABLE.""")
 
-IDCODE = DPRegister('IDCODE', [], 0x00, 32,
+IDCODE = components.Register('IDCODE', [], 0x00, 32,
                     access='read-only',
                     fullname='Identification Code',
                     descr="""\
-The Identification Code Register is always present on all DP implementations. It
+The Identification Code components.Register is always present on all DP implementations. It
 provides identification information about the ARM Debug Interface.""")
 
-ABORT = DPRegister('ABORT', 
+ABORT = components.Register('ABORT', 
                    [components.BitField('ORUNERRCLR', 4, 1, fullname='Overrun Error Clear', 
                                         descr="""\
 Write 1 to this bit to clear the STICKYORUN overrun error flag to 0."""),
@@ -188,9 +139,9 @@ extended period.""")],
                    0x00, 32, 
                    access='write-only',
                    fullname='AP Abort',
-                   descr='The AP Abort Register')
+                   descr='The AP Abort components.Register')
 
-CTRLSTAT = DPRegister('CTRLSTAT',
+CTRLSTAT = components.Register('CTRLSTAT',
                       [components.BitField('CSYSPWRUPACK', 31, 1, fullname='System Power Up Acknowledge'),
                        components.BitField('CSYSPWRUPREQ', 30, 1, fullname='System Power Up Request'),
                        components.BitField('CDBGPWRUPACK', 29, 1, fullname='Debug Power Up Acknowledge'),
@@ -210,18 +161,18 @@ This bit is set to 1 if a Write Data Error occurs. This happens if:
 submitted to the AP.
 
 This bit can only be cleared to 0 by writing 1 to the WDERRCLR field of the AP
-Abort Register, see The AP Abort Register.  After a power-on
+Abort components.Register, see The AP Abort components.Register.  After a power-on
 reset this bit is 0."""),
                        components.BitField('READOK', 6, 1, descr="""\
 This bit is set to 1 if the response to the previous AP or RDBUFF read was
 OK. It is cleared to 0 if the response was not OK."""),
-                       components.BitField('STICKYERR', 5, 1, 
+                       components.BitField('STICKYERR', 5, 1, fullname='Sticky Error',
                                            descr="This bit is set to 1 if an error is returned by an AP transaction."),
-                       components.BitField('STICKYCMP', 4, 1, 
+                       components.BitField('STICKYCMP', 4, 1, fullname='Sticky Compare',
                                            descr="""This bit is set to 1 when a match occurs on a pushed compare or a pushed verify operation."""),
                        components.BitField('TRNMODE', 2, 2, fullname='Transfer Mode', 
                                            descr="""This field sets the transfer mode for AP operations."""),
-                       components.BitField('STICKYORUN', 1, 1, 
+                       components.BitField('STICKYORUN', 1, 1,  fullname='Sticky Overrun',
                                            descr="""If overrun detection is enabled, this bit is set to 1 when an overrun occurs."""),
                        components.BitField('ORUNDETECT', 0, 1, fullname='Overrun Detect', 
                                            descr="""This bit is set to 1 to enable overrun detection.""")],
@@ -229,18 +180,18 @@ OK. It is cleared to 0 if the response was not OK."""),
                       access='read-write',
                       fullname='DP Control/Status',
                       descr="""\
-The Control/Status Register is always present on all DP
+The Control/Status components.Register is always present on all DP
 implementations. Its provides control of the DP, and status information about
 the DP.""")
 
-SELECT = DPRegister('SELECT', 
+SELECT = components.Register('SELECT', 
                     [components.BitField('APSEL', 24, 8, fullname='AP Select', 
                                          descr="Selects the current AP."),
                      components.BitField('APBANKSEL', 4, 4, fullname='AP Bank Select', 
                                          descr="Selects the active four-word register bank on the current AP"),
                      components.BitField('CTRLSEL', 0, 1, 
-                                         [components.EnumeratedValue('CTRLSEL', 0, descr='Control Status Register'),
-                                          components.EnumeratedValue('CTRLSEL', 1, descr='Wire Control Register')],
+                                         [components.EnumeratedValue('CTRLSEL', 0, descr='Control Status components.Register'),
+                                          components.EnumeratedValue('CTRLSEL', 1, descr='Wire Control components.Register')],
                                          fullname='CTRL Select', 
                                          descr="""\
 SW-DP Debug Port address bank select. Controls which DP register is selected at
@@ -250,11 +201,11 @@ address b01 on a SW-DP.""")
                     access='write-only',
                     fullname='Select',
                     descr="""\
-The AP Select Register is always present on all DP implementations. Its
+The AP Select components.Register is always present on all DP implementations. Its
 main purpose is to select the current Access Port (AP) and the active four-word
 register bank within that AP.""")
 
-RESEND = DPRegister('RESEND',
+RESEND = components.Register('RESEND',
                     [components.BitField('RESEND', 0, 32, 
                                          descr="The value that was returned by the last AP read or DP RDBUFF read.")],
                     0x08, 32, 
@@ -270,7 +221,75 @@ can be accessed multiple times. It always return the same value until a new
 access is made to the DP RDBUFF register or to an AP register.""")
 
 
-DebugPort = Port('DP', [IDCODE, ABORT, CTRLSTAT, SELECT, RESEND, WCR, RDBUFF], 0, 32, 2,
+class Port(blocks.DeviceBlock):
+    """
+    Models a generic hardware block that lives in an address space *and* defines
+    it's own independent address space.
+
+    Parameters
+    ----------
+    mnemonic : str
+        Shorthand or abbreviated name of block.
+    subblocks : list-like
+        All the children of this block.
+    port : int
+        The 'port' address of this block.
+    lane_width : int
+        Defines the number of data bits uniquely selected by each address. For
+        example, a value of 8 denotes that the device is byte-addressable.
+    bus_width : int
+        Defines the bit-width of the maximum single data transfer supported by
+        the bus infrastructure. For example, a value of 32 denotes that the
+        device bus can transfer a maximum of 32 bits in a single transfer.
+    bind : bool
+        Tells the constructor whether or not to bind the subblocks as attributes
+        of the Block instance.
+    fullname : str
+        Expanded name or display name of block.
+    descr : str
+        A string describing functionality, usage, and other relevant notes about
+        the block.
+    """
+    _dynamicBinding = True
+    _macrokey = _attrs = 'port'
+    _fmt="{name} ({mnemonic}, {port})"
+
+    def __init__(self, mnemonic, registers, port, lane_width, bus_width,
+                 bind=True, fullname=None, descr='-', kwattrs={}):
+        super(Port, self).__init__(mnemonic, registers, lane_width, bus_width,
+                                   bind=bind, fullname=fullname, descr=descr,
+                                   kwattrs=kwattrs)
+        self._port = utils.HexValue(port)
+
+        for blk in self.walk():
+            blk.root = self
+
+        for reg in self:
+            reg._address = utils.HexValue(reg._address, 8)
+
+
+class AccessPort(Port):
+    # IDR = IDR # all access ports require an IDR
+
+    def _read(self, address, size):
+        self.root.select(self._port, (address&0xF0) >> 4)
+        return self.root.read(1, address&0xF)
+
+    def _write(self, address, value, size):
+        self.root.select(self._port, (address&0xF0) >> 4)
+        self.root.write(1, address&0xF, value)
+
+
+class DebugPort(Port):
+
+    def _read(self, address, size):
+        return self.root.read(0, address)
+
+    def _write(self, address, value, size):
+        self.root.write(0, address, value)
+
+
+DP = DebugPort('DP', [IDCODE, ABORT, CTRLSTAT, SELECT, RESEND, WCR, RDBUFF], 0, 32, 32,
                  fullname='Debug Port', descr="""\
 An ARM Debug Interface implementation includes a single Debug Port (DP), that provides the external
 physical connection to the interface. The ARM Debug Interface v5 specification supports two DP
@@ -288,28 +307,54 @@ features. In particular, each implementation provides:
 3) A means of aborting a register access that appears to have faulted.""")
 
 
-# DAP = blocks.RootBlock('DAP', [DebugPort, MemoryAccessPort], 1, 1, fullname='Debug Access Port')
+MEMAP = AccessPort('MEMAP', [CSW, TAR, DRW, IDR], 0, 32, 32,
+                   fullname='Memory Access Port', descr="""\
+A MEM-AP provides a DAP with access to a memory subsystem. Another way of
+describing the operation of a MEM-AP is that:
+
+1) A debug component implements a memory-mapped abstraction of a set of resources.
+2) The MEM-AP provides AP access to those resources.
+
+However, an access to a MEM-AP might only access a register within the MEM-AP,
+without generating a memory access.""")
 
 
-class DAPLink(blocks.RootBlock):
-    MEMAP = MemoryAccessPort
-    DP = DebugPort
+class DAPLink(devicelink.DeviceLink, blocks.DeviceBlock):
+    MEMAP = MEMAP
+    DP = DP
 
-    def __new__(cls, transport=Transport, interface=None):
-        return super(DAPLink, cls).__new__(cls, 'DAP', [cls.MEMAP, cls.DP], 1,
-                                           1, fullname='Debug Access Port',
-                                           bind=False)
+    def __new__(cls, *args, **kwargs):
+        return blocks.DeviceBlock.__new__(cls, 'DAP', [cls.MEMAP, cls.DP], 32, 32,
+                                          fullname='Debug Access Port', bind=False)
 
-    def __init__(self, transport=Transport, interface=None):
-        super(DAPLink, self).__init__('DAP', [self.MEMAP,self.DP], 1, 1,
-                                      fullname='Debug Access Port', bind=False)
-        if interface is None:
-            interface = Interface()
-        self._interface = interface
-        self._transport = transport(interface)
+    def __init__(self, transport):
+        blocks.DeviceBlock.__init__(self, 'DAP', [self.MEMAP,self.DP], 32, 32,
+                                    fullname='Debug Access Port')
+        assert isinstance(transport, Transport), "Link must be of Transport type"
+        devicelink.DeviceLink.__init__(self, transport)
 
-    def connect(self, frequency=1000000):
-        self._interface.connect()
+        for blk in self:
+            blk._macrovalue = utils.HexValue(blk._macrovalue, 8)
+            blk.root = self
+
+    def connect(self):
+        """
+        Establish a connection to the Debug Access Port.
+        """
+        super(DAPLink, self).connect()
+
+        # read ID code to confirm synchronization
+        logging.info('IDCODE: %s', self.DP.IDCODE.value)
+
+        # clear errors
+        self.DP.ABORT = 0x1F
+
+        # Reset CTRL flags to default values
+        self.DP.CTRLSTAT.MASKLANE = 0xF
+        self.DP.CTRLSTAT.TRNMODE = 0
+
+        # Reset the AP, AP bank, and CTRLSEL to their default
+        self.DP.SELECT = 0
 
         # set clock frequency
         # self.setSWJClock(frequency)
@@ -320,59 +365,26 @@ class DAPLink(blocks.RootBlock):
         # configure swd protocol
         # self.swdConfigure()
 
-        self.reset()
-        self.init()
-
-    def init(self):
+        # Do a system and debug power up request
         self.DP.SELECT = 0
-        self.DP.CTRLSTAT = self.DP.CTRLSTAT.CSYSPWRUPREQ | self.DP.CTRLSTAT.CDBGPWRUPREQ
-        mask = self.DP.CTRLSTAT.CSYSPWRUPACK | self.DP.CTRLSTAT.CDBGPWRUPACK
+        self.DP.CTRLSTAT.pack(CSYSPWRUPREQ=1, CDBGPWRUPREQ=1)
+        mask = self.DP.CTRLSTAT.CSYSPWRUPACK._mask | self.DP.CTRLSTAT.CDBGPWRUPACK._mask
         while (self.DP.CTRLSTAT&mask) != mask: None
-        
 
-    def _line_reset(self):
-        self._interface.write('1'*56)
+        # Prod for support of transfers smaller than 32 bits
+        self.MEMAP.CSW.SIZE = 0
+        if self.MEMAP.CSW.SIZE == 0:
+            self._lane_width = 8 << 0
+            return
 
-    def clear(self):
-        self.DP.ABORT = 0x1F
+        self.MEMAP.CSW.SIZE = 1
+        if self.MEMAP.CSW.SIZE == 1:
+            self._lane_width = 8 << 1
+            return
 
-    def reset(self):
-        # Perform a connect/reset sequence
-        self._line_reset()
+        self._lane_width = 8 << 2
 
-        # switch from jtag to swd
-        self._JTAG2SWD()
-
-        # clear errors
-        self.clear()
-
-        # Reset CTRL flags to default values
-        self.DP.CTRLSTAT.MASKLANE = 0xF
-        self.DP.CTRLSTAT.TRNMODE = 0
-
-        # Reset the AP, AP bank, and CTRLSEL to their default
-        self.DP.SELECT = 0
-        
-    def _JTAG2SWD(self):
-        # send the 16bit JTAG-to-SWD sequence
-        self._interface.write(reverse_bits(0x9EE7,w=16))
-
-        self._line_reset()
-
-        self._interface.write('0'*8)
-
-        # read ID code to confirm synchronization
-        logging.info('IDCODE: %s', self.DP.IDCODE.value)
-
-    def readDP(self, address):
-        self._transport.sendRequest(0, 1, address)
-        return self._transport.readPacket()
-
-    def writeDP(self, address, data):
-        self._transport.sendRequest(0, 0, address)
-        self._transport.sendPacket(data)
-
-    def readAP(self, bank, address, port=0):
+    def select(self, port, bank):
         apsel = self.DP.SELECT.APSEL.value
         banksel = self.DP.SELECT.APBANKSEL.value
 
@@ -381,42 +393,29 @@ class DAPLink(blocks.RootBlock):
         if banksel != bank:
             self.DP.SELECT.APBANKSEL = bank
 
+    def _read(self, APnDP, address):
+        assert (address&~0b1100) == 0, "Invalid register address; should be of form 0bxx00"
+
         try:
-            self._transport.sendRequest(1, 1, address)
+            self.transport.sendRequest(APnDP, 1, address & 0x0F)
         except Transport.TransferFault:
             self.DP.ABORT.STKERRCLR = 1
             raise
 
-        r = self._transport.readPacket()
+        return self.transport.readPacket()
+    read = _read
 
-        if apsel != port:
-            self.DP.SELECT.APSEL = apsel
-        if banksel != bank:
-            self.DP.SELECT.APBANKSEL = banksel
-
-        return r
-
-    def writeAP(self, bank, address, data, port=0):
-        apsel = self.DP.SELECT.APSEL.value
-        banksel = self.DP.SELECT.APBANKSEL.value
-
-        if apsel != port:
-            self.DP.SELECT.APSEL = port
-        if banksel != bank:
-            self.DP.SELECT.APBANKSEL = bank
+    def _write(self, APnDP, address, data):
+        assert (address&~0b1100) == 0, "Invalid register address; should be of form 0bxx00"
 
         try:
-            self._transport.sendRequest(1, 0, address)
+            self.transport.sendRequest(APnDP, 0, address & 0x0F)
         except Transport.TransferFault:
             self.DP.ABORT.STKERRCLR = 1
             raise
 
-        self._transport.sendPacket(data)
-
-        if apsel != port:
-            self.DP.SELECT.APSEL = apsel
-        if banksel != bank:
-            self.DP.SELECT.APBANKSEL = banksel
+        self.transport.sendPacket(data)
+    write = _write
 
     def memWrite(self, addr, data, accessSize=32):
         self.DP.SELECT = 0
@@ -436,14 +435,8 @@ class DAPLink(blocks.RootBlock):
         self.MEMAP.TAR = addr
 
         if accessSize == 8:
-            return self.MEMAP.DRW.value >> ((addr & 0x03) << 3) & 0xff
+            return self.MEMAP.DRW >> ((addr & 0x03) << 3) & 0xff
         elif accessSize == 16:
-            return self.MEMAP.DRW.value >> ((addr & 0x02) << 3) & 0xffff
+            return self.MEMAP.DRW >> ((addr & 0x02) << 3) & 0xffff
         else:
             return self.MEMAP.DRW.value
-
-    def disconnect(self):
-        try:
-            self._line_reset()
-        finally:
-            self._interface.disconnect()

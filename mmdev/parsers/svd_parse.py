@@ -40,9 +40,20 @@ def _readint(node, tag, default=None, parent={}, required=False, pop=True):
 
 class SVDNode(dict):
     def __init__(self, node, *args, **kwargs):
-        super(SVDNode, self).__init__(**{ e.tag: e for e in node })
+        super(SVDNode, self).__init__()
+
+        for e in node:
+            if e.tag not in self:
+                self[e.tag] = e
+                continue
+
+            if not isinstance(self[e.tag], list):
+                self[e.tag] = [self[e.tag]]
+            self[e.tag].append(e)
+
         self.name = node.findtext('name')
         self.update(node.attrib)
+
 
 class SVDParser(DeviceParser):
     _raiseErr = True
@@ -132,7 +143,26 @@ class SVDParser(DeviceParser):
 
         regs = cls.parse_subblocks(pphnode.pop('registers', parent.get('registers', [])), cls.parse_register, pphaddr, **regopts)
 
-        return Peripheral(name, regs, pphaddr, descr=descr, kwattrs=pphnode)
+        # addressBlocks can be either a list or a single instance
+        # here we force it into a list
+        addrblocks = pphnode.pop('addressBlock', parent.get('addressBlock'))
+        if not isinstance(addrblocks, list):
+            addrblocks = [addrblocks]
+
+        pphblk = []
+        for addrblk in map(SVDNode, addrblocks):
+            offset = _readint(addrblk, 'offset', required=True)
+            size = _readint(addrblk, 'size', required=True)
+            # usage = _readint(pphnode, 'usage')
+
+            pphblk.append(Peripheral(name,
+                                     regs,
+                                     pphaddr + offset,
+                                     size,
+                                     descr=descr,
+                                     kwattrs=pphnode))
+        return pphblk
+
 
     @classmethod
     def parse_register(cls, regnode, baseaddr, parent={}, size=None,
@@ -142,7 +172,7 @@ class SVDParser(DeviceParser):
         name       = _readtxt(regnode, 'name', required=True)
         addr       = _readint(regnode, 'addressOffset', required=True) + baseaddr
         descr      = _readtxt(regnode, 'description', required=True)
-
+        
         size       = _readint(regnode, 'size', size, required=True)
         access     = _readtxt(regnode, 'access', access, required=True)
         # protection = _readtxt(regnode, 'protection', protection)

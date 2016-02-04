@@ -18,6 +18,32 @@ reverse_bits = lambda b,w: ("{0:0%db}" % w).format(b)[::-1]
 
 class SWD(Transport):
 
+    def connect(self):
+        self.datalink.connect()
+
+        # Perform a connect/reset sequence
+        self.line_reset()
+
+        # switch from jtag to swd
+        self.JTAG2SWD()
+
+    def disconnect(self):
+        try:
+            self.line_reset()
+        finally:
+            self.datalink.disconnect()
+
+    def line_reset(self):
+        self.datalink.write('1'*56)
+
+    def JTAG2SWD(self):
+        # send the 16bit JTAG-to-SWD sequence
+        self.datalink.write(reverse_bits(0x9EE7,w=16))
+
+        self.line_reset()
+
+        self.datalink.write('0'*8)
+
     def sendPacket(self, data):
         parity = data
         parity = (parity ^ (parity >> 16))
@@ -31,12 +57,12 @@ class SWD(Transport):
         data = '0' + reverse_bits(data,w=32) + ('1' if parity else '0')
 
         logging.debug("WDATA %s (0x%08x)" % (data[1:-1], int(data[-2:0:-1], base=2)))
-        self.interface.write(data)
+        self.datalink.write(data)
 
     def readPacket(self):
         # read 32bit word + 1 bit parity, and clock 1 additional cycle to
         # satisfy turnaround for next transmission
-        x = self.interface.read(34)
+        x = self.datalink.read(34)
         logging.debug("RDATA %s (0x%08x)" % (x[31::-1], int(x[31::-1], base=2)))
         data, presp = int(x[31::-1], 2), int(x[32], 2)
 
@@ -65,22 +91,22 @@ class SWD(Transport):
 
         rqst = '1{}{}01'.format(reverse_bits(rqst,w=4), '1' if parity else '0')
         logging.debug('RQST %s (apndp=%d, rnw=%d, a23=0x%x)' % (rqst, apndp, rnw, a23))
-        self.interface.write(rqst)
+        self.datalink.write(rqst)
 
         # wait 1 TRN then read 3 bit ACK
-        ack = self.interface.read(4)
+        ack = self.datalink.read(4)
         logging.debug('ACK %s' % ack[3:0:-1])
         ack = int(ack[3:0:-1],2)
 
         tries = 0
         while ack == ACK_WAIT and tries < 3:
             time.sleep(0.1)
-            self.interface.read(1) # insert a turnaround before sending next request
+            self.datalink.read(1) # insert a turnaround before sending next request
 
             logging.debug('RQST %s (apndp=%d, rnw=%d, a23=0x%x)' % (rqst, apndp, rnw, a23))
-            self.interface.write(rqst)
+            self.datalink.write(rqst)
 
-            ack = self.interface.read(4)
+            ack = self.datalink.read(4)
             logging.debug('ACK %s' % ack[3:0:-1])
             ack = int(ack[3:0:-1],2)
             tries += 1
