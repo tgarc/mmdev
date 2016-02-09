@@ -1,5 +1,6 @@
 from mmdev import blocks
 from mmdev import utils
+import os
 
 
 _levels = {'device': 0,
@@ -30,13 +31,13 @@ class Device(blocks.DeviceBlock):
     bind : bool
         Tells the constructor whether or not to bind the subblocks as attributes
         of the Block instance.
-    fullname : str
+    displayname : str
         Expanded name or display name of block.
     descr : str
         A string describing functionality, usage, and other relevant notes about
         the block.
     """
-    _fmt = "{name} ({mnemonic}, {vendor})"
+    _fmt = "{displayName} ({mnemonic}, {vendor})"
     _attrs = 'vendor'
 
     def __init__(self, mnemonic, peripherals, lane_width, bus_width, cpu=None, vendor='Unknown Vendor', **kwargs):
@@ -150,22 +151,36 @@ class Device(blocks.DeviceBlock):
         return tuple(res) if isinstance(res, list) else (res,)
 
     @staticmethod
-    def from_devfile(devfile, file_format, raiseErr=True):
+    def from_devfile(devfile, file_format=None, raiseErr=True):
         """
-        Parse a device file using the given file format
+        Parse a device file using the given file format. If file format is not
+        given, file extension will be used.
+
+        Supported Formats:
+            + 'json' : JSON
+            + 'svd'  : CMSIS-SVD
         """
         from mmdev import parsers
-        parse = parsers.PARSERS[file_format]
+
+        if file_format is None:
+            file_format = os.path.splitext(devfile)[1][1:]
+        try:
+            parse = parsers.PARSERS[file_format]
+        except KeyError:
+            raise KeyError("Extension '%s' not recognized" % file_format)
         return parse(devfile, raiseErr=raiseErr)
 
-    # @classmethod
-    # def from_json(cls, devfile):
-    #     return cls.from_devfile(devfile, 'json')
+    def to_devfile(self, file_format):
+        """
+        Parse a device file using the given file format. If file format is not
+        given, file extension will be used.
 
-    # @classmethod
-    # def from_pycfg(cls, devfile):
-    #     return cls.from_devfile(devfile, 'pycfg')
-
-    @classmethod
-    def from_svd(cls, devfile, **kwargs):
-        return cls.from_devfile(devfile, 'svd', **kwargs)
+        Supported Formats:
+            + 'json' : JSON
+        """
+        from mmdev import dumpers
+        try:
+            dump = dumpers.DUMPERS[file_format]
+        except KeyError:
+            raise KeyError("File format '%s' not recognized" % file_format)
+        return dump(self)

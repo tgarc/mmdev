@@ -9,6 +9,10 @@ class DeviceLink(object):
     transport : mmdev.transport.Transport
         Specifies a transport protocol to use.
     """
+
+    class DeviceLinkException(Exception):
+        pass
+
     def __init__(self, transport):
         self.transport = transport
 

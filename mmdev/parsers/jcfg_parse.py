@@ -1,70 +1,117 @@
-import json
-from itertools import imap
-from mmdev.parsers.deviceparser import DeviceParser
+from mmdev.parsers.deviceparser import DeviceParser, ParseException, RequiredValueError
 from mmdev.device import Device
-from mmdev.components import Peripheral, Register, BitField
+from mmdev.components import Peripheral, Register, BitField, EnumeratedValue
+import json
 
 
-def _readint(x):
+def _readtxt(node, tag, default=None, parent={}, required=False, pop=False):
+    if pop:
+        x = node.pop(tag, parent.get(tag, default))
+    else:
+        x = node.get(tag, parent.get(tag, default))
+
+    if required and x is None:
+        raise RequiredValueError("Missing required value '%s' in node '%s'" % (tag, node))
+
+    return x
+
+
+def _readint(node, tag, default=None, parent={}, required=False, pop=False):
+    if pop:
+        x = node.pop(tag, None)
+    else:
+        x = node.get(tag, None)
+
+    if x is None:
+        if required and default is None:
+            raise RequiredValueError("Missing required value '%s' in node '%s'" % (tag, node))
+                
+        return parent.get(tag, default)
+
     try:
         return int(x)
     except ValueError:
-        return int(x, 16)
+        return int(x, 16)        
 
 
 class JCFGParser(DeviceParser):
+
     @classmethod
-    def parse_peripheral(cls, pphname, pphnode, devfile):
+    def parse_peripheral(cls, pphname, pphnode):
         regs = []
-        for regnode in imap(devfile['registers'].get, pphnode['registers']):
-            regs.append(cls.parse_register(regnode, devfile))
+        for regname, regnode in pphnode.get('registers', {}).iteritems():
+            regs.append(cls.parse_register(regname, regnode))
 
         return Peripheral(pphname, 
-                          _readint(pphnode['addr']),
                           regs,
-                          fullname=pphnode.get('name','Peripheral'),
-                          descr=pphnode.get('descr',''))
+                          _readint(pphnode, 'address', required=True),
+                          _readint(pphnode, 'size', required=True),
+                          displayName=_readtxt(pphnode, 'displayName', ''),
+                          descr=_readtxt(pphnode, 'description',''))
 
     @classmethod
-    def parse_register(cls, regnode, devfile):
+    def parse_register(cls, regname, regnode):
         bits = []
-        for bfnode in imap(devfile['bitfields'].get, regnode['bitfields']):
-            bits.append(cls.parse_bitfield(bfnode))
+        for bfname, bfnode in regnode.get('bitfields', {}).iteritems():
+            bits.append(cls.parse_bitfield(bfname, bfnode))
 
-        return Register(regnode['mnemonic'],
-                        _readint(regnode['addr']),
+        return Register(regname,
                         bits,
-                        fullname=regnode.get('name','Register'),
-                        descr=regnode.get('descr',''))
+                        _readint(regnode, 'address', required=True),
+                        _readint(regnode, 'size', required=True),
+                        access=_readtxt(regnode, 'access', 'read-write'),
+                        displayName=_readtxt(regnode, 'displayName',''),
+                        descr=_readtxt(regnode, 'description',''))
 
 
     @classmethod
-    def parse_bitfield(cls, bfnode):
-        return BitField(bfnode['mnemonic'], 
-                        _readint(bfnode['mask']),
-                        fullname=bfnode.get('name','BitField'),
-                        descr=bfnode.get('descr',''))
+    def parse_bitfield(cls, bfname, bfnode):
+        evals = []
+        for evname, evnode in bfnode.get('enumeratedValues', {}).iteritems():
+            evals.append(cls.parse_enumerated_value(evname, evnode))
+
+        return BitField(bfname,
+                        _readint(bfnode, 'offset', required=True),
+                        _readint(bfnode, 'width', required=True),
+                        evals,
+                        access=_readtxt(bfnode, 'access', 'read-write'),
+                        displayName=_readtxt(bfnode, 'displayName',''),
+                        descr=_readtxt(bfnode, 'description',''))
 
     @classmethod
-    def parse_device(cls, devfile):
+    def parse_enumerated_value(cls, evname, evnode):
+        return EnumeratedValue(evname,
+                               _readint(evnode, 'value', required=True),
+                               displayName=_readtxt(evnode, 'displayName',''),
+                               descr=_readtxt(evnode, 'description',''))
+
+    @classmethod
+    def parse_device(cls, devfile, raiseErr=True):
+        cls._raiseErr = raiseErr
+
         if isinstance(devfile, basestring):
-            import re
-            fname = re.sub('\..*', '', devfile)
+            import os
+            fname = devfile
             with open(devfile) as fh:
                 devfile = json.load(fh)
         else:
             fname = fh.name
             devfile = json.load(fh, **kwargs)
 
-        name = devfile.get('name', 'Device')
-        mnem = devfile['mnemonic'] if devfile.get('mnemonic', '') else fname
-        descr = devfile.get('descr', '')
-        width = devfile.get('width',32)
-        vendor = devfile.get('vendor', '')
+        path, fname = os.path.split(fname)
+        fname = os.path.splitext(fname)[0]
+
+        devfile = devfile['device'] # 'device' is the only node that exists at
+                                    # the top level
 
         pphs = []
-        for pphname, pphnode in devfile['blocks'].iteritems():
-            pphs.append(cls.parse_peripheral(pphname, pphnode, devfile))
+        for pphname, pphnode in devfile['peripherals'].iteritems():
+            pphs.append(cls.parse_peripheral(pphname, pphnode))
 
-        return Device(mnem, pphs,
-                      fullname=name, descr=descr, width=width, vendor=vendor)
+        return Device(_readtxt(devfile, 'mnemonic', required=True),
+                      pphs, 
+                      _readint(devfile, 'lane_width', required=True), 
+                      _readint(devfile, 'bus_width', required=True), 
+                      displayName=_readtxt(devfile, 'displayName', fname), 
+                      descr=_readtxt(devfile, 'description', ''), 
+                      vendor=_readtxt(devfile, 'vendor', ''))

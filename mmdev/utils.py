@@ -3,7 +3,6 @@ import StringIO
 
 class HexValue(int):
     def __new__(cls, x, bitwidth=0, base=None):
-        # print cls, type(x), x
         if base is None:
             newint = int.__new__(cls, x)
         else:
@@ -20,7 +19,7 @@ class HexValue(int):
         return HexValue(int.__invert__(self), self._width)
 
     def __lshift__(self, other):
-        return HexValue(int.__lshift__(self, int(other)), self._width+int(other))
+        return HexValue(int.__lshift__(self, int(other)), self._width)
     def __rshift__(self, other):
         return HexValue(int.__rshift__(self, int(other)), self._width)
     def __and__(self, other):

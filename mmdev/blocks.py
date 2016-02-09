@@ -11,14 +11,33 @@ _textwrap = textwrap.TextWrapper(width=70)
 
 
 class MetaBlock(type):
-    def __init__(self, name, bases, attrs):
+    def __new__(cls, name, bases, attrs):
+        clsattrs = attrs.get('_attrs', ())
+        if isinstance(clsattrs, basestring):
+            clsattrs = [clsattrs,]
+
+        # inherit all _attrs from base classes
+        clsattrs = list(clsattrs)
         for b in bases:
             if type(b) is not MetaBlock:
                 continue
-            newattrs = attrs.get('_attrs', ())
+            newattrs = getattr(b, '_attrs', ())
             if isinstance(newattrs, basestring):
-                newattrs = (newattrs,)
-            self._attrs = tuple(getattr(b, '_attrs', ())) + tuple(newattrs)
+                newattrs = [newattrs,]
+            clsattrs.extend(list(newattrs))
+        clsattrs = list(set(clsattrs))
+
+        # allow for aliasing _attrs
+        for lnk, trgt in attrs.get('_alias', {}).items():
+            clsattrs.remove(trgt)   # target attr will no longer be visible from
+                                    # the attrs dict
+            clsattrs.append(lnk)    # alias attr will replace target attr 
+            trgt = '_'+trgt
+            lnk = '_'+lnk
+            attrs[lnk] = property(lambda self: getattr(self, trgt), lambda self, v: setattr(self, trgt, v))
+
+        attrs['_attrs'] = tuple(clsattrs)
+        return super(MetaBlock, cls).__new__(cls, name, bases, attrs)
 
 
 class LeafBlock(object):
@@ -29,7 +48,7 @@ class LeafBlock(object):
     ----------
     mnemonic : str
         Shorthand or abbreviated name of block.
-    fullname : str
+    displayName : str
         Expanded name or display name of block.
     descr : str
         A string describing functionality, usage, and other relevant notes about
@@ -47,12 +66,12 @@ class LeafBlock(object):
     __metaclass__ = MetaBlock
 
     _macrokey = 'mnemonic'
-    _fmt="{name} ({mnemonic})"
-    _attrs = 'mnemonic', 'name', 'description', 'typename'
+    _fmt = "{displayName} ({mnemonic})"
+    _attrs = 'mnemonic', 'displayName', 'description', 'typename'
     
-    def __init__(self, mnemonic, fullname=None, descr='-', kwattrs={}):
+    def __init__(self, mnemonic, displayName='', descr='', kwattrs={}):
         self._mnemonic = mnemonic
-        self._name = fullname or mnemonic
+        self._displayName = displayName
         self._description = descr
         self.parent = None # parent is None until attached to another block
         self.root = self
@@ -75,14 +94,26 @@ class LeafBlock(object):
     @property
     def attrs(self):
         attrs= { fn: getattr(self, '_'+fn) for fn in self._attrs }
-        attrs['extra'] = self._kwattrs
+        if self._kwattrs:
+            attrs['extra'] = self._kwattrs
         return attrs
 
+    @property
+    def _scrubbed_attrs(self):
+        blkdict = {}
+        for k,v in self.attrs.iteritems():
+            if v == '' or v is None or k == 'typename':
+                continue
+            if isinstance(v, utils.HexValue):
+                v = str(v)
+            blkdict[k] = v
+        return blkdict
+
     def to_json(self, recursive=False, **kwargs):
-        return json.dumps(self.to_dict(recursive=recursive), **kwargs)
+        return json.dumps({self._typename.lower() : self.to_dict(recursive=recursive)}, **kwargs)
 
     def to_dict(self, **kwargs):
-        return { self._mnemonic: self.attrs }
+        return self._scrubbed_attrs
 
     def _tree(self, d=-1, pfx=''):
         return textwrap.fill(self._fmt.format(**self.attrs), subsequent_indent=pfx, width=80)
@@ -93,6 +124,9 @@ class LeafBlock(object):
 
     def __repr__(self):
         return "<{:s} '{:s}'>".format(self._typename, self._mnemonic)
+
+    def __str__(self):
+        return self._fmt.format(**self.attrs)
 
 
 class Block(LeafBlock):
@@ -109,7 +143,7 @@ class Block(LeafBlock):
     bind : bool
         Tells the constructor whether or not to bind the subblocks as attributes
         of the Block instance.
-    fullname : str
+    displayName : str
         Expanded name or display name of block.
     descr : str
         A string describing functionality, usage, and other relevant notes about
@@ -158,8 +192,8 @@ class Block(LeafBlock):
         else:
             return mblk
 
-    def __init__(self, mnemonic, subblocks, bind=True, fullname=None, descr='-', kwattrs={}):
-        super(Block, self).__init__(mnemonic, fullname=fullname, descr=descr, kwattrs=kwattrs)
+    def __init__(self, mnemonic, subblocks, bind=True, displayName='', descr='', kwattrs={}):
+        super(Block, self).__init__(mnemonic, displayName=displayName, descr=descr, kwattrs=kwattrs)
 
         self._nodes = list(subblocks)
         for blk in self:
@@ -177,17 +211,17 @@ class Block(LeafBlock):
         namespace.update(dict(self.iteritems()))
 
     def to_dict(self, recursive=False):
-        blkdict = self.attrs
-        for blk in self.itervalues():
+        blkdict = self._scrubbed_attrs
+        for blk in self:
             key = blk._typename.lower()+'s'
             if key not in blkdict:
                 blkdict[key] = {}
             if recursive:
-                v = blk.to_dict()
+                v = blk.to_dict(recursive=recursive)
             else:
-                v = blk.attrs
-            blkdict[key].update(v)
-        return { self._mnemonic: blkdict }
+                v = blk._scrubbed_attrs
+            blkdict[key].update({v.pop('mnemonic') : v})
+        return blkdict
 
     def iterkeys(self):
         return iter(blk._mnemonic for blk in self._nodes)
@@ -242,12 +276,16 @@ class Block(LeafBlock):
         return treestr
 
     def tree(self, depth=2):
-        print '<' + self._typename + '>' + ' ' + self._tree(d=depth, pfx=' '*(len(self._typename)+3))
+        pfx = '<' + self._typename + '>' + ' '
+        print pfx + self._tree(d=depth, pfx=' '*len(pfx))
 
-    def ls(self):
+    def _ls(self):
         headerstr = self._fmt.format(**self.attrs)
         substr = "\n\t".join([("{%s} {mnemonic}" % blk._macrokey).format(**blk.attrs) for blk in self._nodes])
-        print headerstr + '\n\t' + substr if substr else headerstr
+        return headerstr + '\n\t' + substr if substr else headerstr
+
+    def ls(self):
+        print self._ls()
 
     def summary(self):
         super(Block, self).summary()
@@ -262,6 +300,9 @@ class Block(LeafBlock):
                                                      self._mnemonic,
                                                      self.parent._typename,
                                                      self.parent._mnemonic)
+
+    def __str__(self):
+        return self._ls()
 
 
 class MemoryMappedBlock(Block):
@@ -282,7 +323,7 @@ class MemoryMappedBlock(Block):
     subblocks : list-like
         All the children of this block.
     address : int
-        The absolute address of this block.
+        The absolute or relative address of this block.
     size : int
         Specifies the size of the address region being covered by this block in
         some arbitrary units (typically bytes). The end address of an address
@@ -290,19 +331,20 @@ class MemoryMappedBlock(Block):
     bind : bool
         Tells the constructor whether or not to bind subblocks as attributes of
         the Block instance.
-    fullname : str
+    displayName : str
         Expanded name or display name of block.
     descr : str
         A string describing functionality, usage, and other relevant notes about
         the block.
     """
-    _fmt="{name} ({mnemonic}, {address})"
+    _fmt="{displayName} ({mnemonic}, {address})"
     _attrs = 'address', 'size'
     _macrokey = 'address'
 
-    def __init__(self, mnemonic, subblocks, address, size, bind=True, fullname=None, descr='-', kwattrs={}):
-        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, bind=bind, fullname=fullname, descr=descr, kwattrs=kwattrs)
-        self._address = utils.HexValue(address)
+    def __init__(self, mnemonic, subblocks, address, size, bind=True, displayName='', descr='', kwattrs={}):
+        super(MemoryMappedBlock, self).__init__(mnemonic, subblocks, bind=bind, displayName=displayName, descr=descr, kwattrs=kwattrs)
+
+        self._address = address
         self._size = size
 
     def __repr__(self):
@@ -330,7 +372,7 @@ class IOBlock(MemoryMappedBlock):
     subblocks : list-like
         All the children of this block.
     address : int
-        The absolute address of this block.
+        The absolute or relative address of this block.
     size : int
         The number of data bits in this block.
     access : access-type (str)
@@ -344,30 +386,26 @@ class IOBlock(MemoryMappedBlock):
     bind : bool
         Tells the constructor whether or not to bind the subblocks as attributes
         of the Block instance.
-    fullname : str
+    displayName : str
         Expanded name or display name of block.
     descr : str
         A string describing functionality, usage, and other relevant notes about
         the block.
     """
     _attrs = 'access'
-    _fmt="{name} ({mnemonic}, {access}, {address})"
+    _fmt="{displayName} ({mnemonic}, {access}, {address})"
 
 
     def __init__(self, mnemonic, subblocks, address, size, access='read-write',
-                 bind=True, fullname=None, descr='-', kwattrs={}):
+                 bind=True, displayName='', descr='', kwattrs={}):
         super(IOBlock, self).__init__(mnemonic, subblocks, address, size, bind=bind,
-                                      fullname=fullname, descr=descr,
+                                      displayName=displayName, descr=descr,
                                       kwattrs=kwattrs)
         self._access = access
         if Access[self._access] & WRITE:
             self.__write = self._write
         if Access[self._access] & READ:
             self.__read = self._read
-
-        # purely for readability, set the data width for child blocks
-        for blk in self:
-            blk._macrovalue = utils.HexValue(blk._macrovalue, self._size)
 
     def __read(self):
         return 0
@@ -447,7 +485,7 @@ class DeviceBlock(Block):
     bind : bool
         Tells the constructor whether or not to bind the subblocks as attributes
         of the Block instance.
-    fullname : str
+    displayName : str
         Expanded name or display name of block.
     descr : str
         A string describing functionality, usage, and other relevant notes about
@@ -456,9 +494,9 @@ class DeviceBlock(Block):
     _attrs = 'lane_width', 'bus_width'
 
     def __init__(self, mnemonic, subblocks, lane_width, bus_width, 
-                 bind=True, fullname=None, descr='-', kwattrs={}):
+                 bind=True, displayName='', descr='', kwattrs={}):
         super(DeviceBlock, self).__init__(mnemonic, subblocks, 
-                                          bind=bind, fullname=fullname,
+                                          bind=bind, displayName=displayName,
                                           descr=descr, kwattrs=kwattrs)
         self._lane_width = lane_width
         self._bus_width = bus_width

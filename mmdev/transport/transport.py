@@ -12,16 +12,16 @@ class Transport(object):
     class TransportException(Exception):
         pass
 
-    class TransferInvalid(TransportException):
+    class InvalidResponse(TransportException):
         pass
 
-    class TransferNoACK(TransportException):
+    class NoACKResponse(TransportException):
         pass
 
-    class TransferFault(TransportException):
+    class FaultResponse(TransportException):
         pass
 
-    class TransferBusy(TransportException):
+    class BusyResponse(TransportException):
         pass
 
     def __init__(self, datalink):

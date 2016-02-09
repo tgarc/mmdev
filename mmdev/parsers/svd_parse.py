@@ -125,7 +125,7 @@ class SVDParser(DeviceParser):
         pphs = cls.parse_subblocks(devnode.pop('peripherals'), cls.parse_peripheral, **regopts)
 
         return Device(mnem, pphs, addressUnitBits, width, cpu=cpu,
-                      fullname=name, descr=descr, vendor=vendor,
+                      displayName=name, descr=descr, vendor=vendor,
                       kwattrs=devnode)
 
     @classmethod
@@ -187,7 +187,7 @@ class SVDParser(DeviceParser):
         if dim is None:
             return Register(name, bits, addr, size, resetMask=resetmask,
                             resetValue=resetvalue, access=access,
-                            fullname=dispname, descr=descr, kwattrs=regnode)
+                            displayName=dispname, descr=descr, kwattrs=regnode)
 
         diminc = _readint(regnode, 'dimIncrement', parent=parent, required=True)
         dimidx = _readtxt(regnode, 'dimIndex', parent=parent)
@@ -208,7 +208,7 @@ class SVDParser(DeviceParser):
                                    resetMask=resetmask, 
                                    resetValue=resetvalue,
                                    access=access,
-                                   fullname=dispname % idx if '%s' in dispname else dispname,
+                                   displayName=dispname % idx if '%s' in dispname else dispname,
                                    descr=descr,
                                    kwattrs=regnode))
         return regblk

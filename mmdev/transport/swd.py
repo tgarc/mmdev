@@ -111,13 +111,13 @@ class SWD(Transport):
             ack = int(ack[3:0:-1],2)
             tries += 1
         if tries == 3:
-            raise Transport.TransferBusy("DAP stuck in WAIT state")
+            raise Transport.BusyResponse("DAP stuck in WAIT state")
 
         if ack==ACK_FAULT:
-            raise Transport.TransferFault('Target responded with FAULT error code')
+            raise Transport.FaultResponse('Target responded with FAULT error code')
         elif ack==0b111:
-            raise Transport.TransferNoACK('No response from target.')
+            raise Transport.NoACKResponse('No response from target.')
         elif ack!=ACK_OK:
-            raise Transport.TransferInvalid('Received invalid ACK ({:#03b})'.format(ack))
+            raise Transport.InvalidResponse('Received invalid ACK ({:#03b})'.format(ack))
 
         return ack
