@@ -1,7 +1,7 @@
-from jcfg_parse import JCFGParser
+from jsvon_parse import JSVONParser
 from svd_parse import SVDParser
 
 PARSERS = { 
-            'json': JCFGParser, 
+            'json': JSVONParser, 
             'svd': SVDParser,
           }

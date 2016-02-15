@@ -1,7 +1,8 @@
-from mmdev.transport import Transport
+import transport
 import logging
 import time
 
+logger = logging.getLogger(__name__)
 
 IDCODE = 0 << 2
 READ = 1 << 1
@@ -16,7 +17,7 @@ ACK_FAULT = 4
 reverse_bits = lambda b,w: ("{0:0%db}" % w).format(b)[::-1]
 
 
-class SWD(Transport):
+class SWD(transport.Transport):
 
     def connect(self):
         self.datalink.connect()
@@ -56,14 +57,14 @@ class SWD(Transport):
         # transmission of data) followed by the data word and parity bit
         data = '0' + reverse_bits(data,w=32) + ('1' if parity else '0')
 
-        logging.debug("WDATA %s (0x%08x)" % (data[1:-1], int(data[-2:0:-1], base=2)))
+        logger.debug("WDATA %s (0x%08x)" % (data[1:-1], int(data[-2:0:-1], base=2)))
         self.datalink.write(data)
 
     def readPacket(self):
         # read 32bit word + 1 bit parity, and clock 1 additional cycle to
         # satisfy turnaround for next transmission
         x = self.datalink.read(34)
-        logging.debug("RDATA %s (0x%08x)" % (x[31::-1], int(x[31::-1], base=2)))
+        logger.debug("RDATA %s (0x%08x)" % (x[31::-1], int(x[31::-1], base=2)))
         data, presp = int(x[31::-1], 2), int(x[32], 2)
 
         parity = data
@@ -74,7 +75,7 @@ class SWD(Transport):
         parity = (parity ^ (parity >> 1)) & 1
 
         if parity ^ presp:
-            raise Transport.TransportException("Parity Error")
+            raise transport.InvalidResponse("Parity Error")
 
         return data
 
@@ -90,12 +91,12 @@ class SWD(Transport):
         parity &= 1
 
         rqst = '1{}{}01'.format(reverse_bits(rqst,w=4), '1' if parity else '0')
-        logging.debug('RQST %s (apndp=%d, rnw=%d, a23=0x%x)' % (rqst, apndp, rnw, a23))
+        logger.debug('RQST %s (apndp=%d, rnw=%d, a23=0x%x)' % (rqst, apndp, rnw, a23))
         self.datalink.write(rqst)
 
         # wait 1 TRN then read 3 bit ACK
         ack = self.datalink.read(4)
-        logging.debug('ACK %s' % ack[3:0:-1])
+        logger.debug('ACK %s' % ack[3:0:-1])
         ack = int(ack[3:0:-1],2)
 
         tries = 0
@@ -103,21 +104,21 @@ class SWD(Transport):
             time.sleep(0.1)
             self.datalink.read(1) # insert a turnaround before sending next request
 
-            logging.debug('RQST %s (apndp=%d, rnw=%d, a23=0x%x)' % (rqst, apndp, rnw, a23))
+            logger.debug('RQST %s (apndp=%d, rnw=%d, a23=0x%x)' % (rqst, apndp, rnw, a23))
             self.datalink.write(rqst)
 
             ack = self.datalink.read(4)
-            logging.debug('ACK %s' % ack[3:0:-1])
+            logger.debug('ACK %s' % ack[3:0:-1])
             ack = int(ack[3:0:-1],2)
             tries += 1
         if tries == 3:
-            raise Transport.BusyResponse("DAP stuck in WAIT state")
+            raise transport.BusyResponse("DAP stuck in WAIT state")
 
         if ack==ACK_FAULT:
-            raise Transport.FaultResponse('Target responded with FAULT error code')
+            raise transport.FaultResponse('Target responded with FAULT error code')
         elif ack==0b111:
-            raise Transport.NoACKResponse('No response from target.')
+            raise transport.NoACKResponse('No response from target.')
         elif ack!=ACK_OK:
-            raise Transport.InvalidResponse('Received invalid ACK ({:#03b})'.format(ack))
+            raise transport.InvalidResponse('Received invalid ACK ({:#03b})'.format(ack))
 
         return ack

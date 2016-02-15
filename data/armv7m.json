@@ -1,8 +1,6 @@
 {
   "device": {
     "mnemonic": "cm3", 
-    "lane_width": 32, 
-    "displayName": "ARM Cortex-M3", 
     "peripherals": {
       "ITM": {
         "size": "0x1000", 
@@ -12,17 +10,17 @@
             "resetMask": "0x00000000", 
             "displayName": "Stimulus Port Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "STIMULUS": {
                 "width": 0, 
                 "access": "write-only", 
-                "mask": "0x00000000", 
+                "mask": "0xffffffff", 
                 "offset": 0
               }, 
               "FIFOREADY": {
                 "width": 0, 
                 "access": "read-only", 
-                "mask": "0x00000000", 
+                "mask": "0x00000001", 
                 "offset": 0
               }
             }, 
@@ -34,11 +32,11 @@
             "resetMask": "0x00000000", 
             "displayName": "Lock Access Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "Lock_Access": {
                 "width": 0, 
                 "access": "read-write", 
-                "mask": "0x00000000", 
+                "mask": "0xffffffff", 
                 "offset": 0
               }
             }, 
@@ -50,11 +48,11 @@
             "resetMask": "0x00000000", 
             "displayName": "Trace Privelege Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "PRIVMASK": {
                 "width": 0, 
                 "access": "read-write", 
-                "mask": "0x00000000", 
+                "mask": "0xffffffff", 
                 "offset": 0
               }
             }, 
@@ -66,23 +64,23 @@
             "resetMask": "0x00000000", 
             "displayName": "Trace Control Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "TraceBusID": {
                 "width": 16, 
                 "access": "read-write", 
-                "mask": "0xffff0000", 
+                "mask": "0x007f0000", 
                 "offset": 16
               }, 
               "BUSY": {
                 "width": 23, 
                 "access": "read-write", 
-                "mask": "0x3fffff800000", 
+                "mask": "0x00800000", 
                 "offset": 23
               }, 
               "ITMENA": {
                 "width": 0, 
                 "access": "read-write", 
-                "mask": "0x00000000", 
+                "mask": "0x00000001", 
                 "offset": 0
               }, 
               "TSENA": {
@@ -94,25 +92,25 @@
               "DWTENA": {
                 "width": 3, 
                 "access": "read-write", 
-                "mask": "0x00000038", 
+                "mask": "0x00000008", 
                 "offset": 3
               }, 
               "SYNCENA": {
                 "width": 2, 
                 "access": "read-write", 
-                "mask": "0x0000000c", 
+                "mask": "0x00000004", 
                 "offset": 2
               }, 
               "SWOENA": {
                 "width": 4, 
                 "access": "read-write", 
-                "mask": "0x000000f0", 
+                "mask": "0x00000010", 
                 "offset": 4
               }, 
               "TSPrescale": {
                 "width": 8, 
                 "access": "read-write", 
-                "mask": "0x0000ff00", 
+                "mask": "0x00000300", 
                 "offset": 8
               }
             }, 
@@ -124,11 +122,11 @@
             "resetMask": "0x00000000", 
             "displayName": "Trace Enable Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "STIMENA": {
                 "width": 0, 
                 "access": "read-write", 
-                "mask": "0x00000000", 
+                "mask": "0xffffffff", 
                 "offset": 0
               }
             }, 
@@ -147,11 +145,11 @@
             "resetMask": "0x00000000", 
             "displayName": "DWT Control Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "EXCTRCENA": {
                 "width": 16, 
                 "access": "read-write", 
-                "mask": "0xffff0000", 
+                "mask": "0x00010000", 
                 "offset": 16
               }
             }, 
@@ -186,11 +184,11 @@
             "resetMask": "0x00000000", 
             "displayName": "Selected Pin Protocol Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "MODE": {
                 "width": 0, 
                 "access": "read-write", 
-                "mask": "0x00000000", 
+                "mask": "0x00000003", 
                 "offset": 0
               }
             }, 
@@ -209,11 +207,11 @@
             "resetMask": "0x00000000", 
             "displayName": "Asynchronous Clock Prescaler Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "PRESCALE": {
                 "width": 0, 
                 "access": "read-write", 
-                "mask": "0x00000000", 
+                "mask": "0x0000ffff", 
                 "offset": 0
               }
             }, 
@@ -258,11 +256,11 @@
             "resetMask": "0x00000000", 
             "displayName": "Debug Core Register Data Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "DBGTMP": {
                 "width": 0, 
                 "access": "read-write", 
-                "mask": "0x00000000", 
+                "mask": "0xffffffff", 
                 "offset": 0
               }
             }, 
@@ -274,17 +272,17 @@
             "resetMask": "0x00000000", 
             "displayName": "Debug Fault Status Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "HALTED": {
                 "width": 0, 
                 "access": "read-write", 
-                "mask": "0x00000000", 
+                "mask": "0x00000001", 
                 "offset": 0
               }, 
               "VCATCH": {
                 "width": 3, 
                 "access": "read-write", 
-                "mask": "0x00000038", 
+                "mask": "0x00000008", 
                 "offset": 3
               }, 
               "BKPT": {
@@ -296,13 +294,13 @@
               "EXTERNAL": {
                 "width": 4, 
                 "access": "read-write", 
-                "mask": "0x000000f0", 
+                "mask": "0x00000010", 
                 "offset": 4
               }, 
               "DWTTRAP": {
                 "width": 2, 
                 "access": "read-write", 
-                "mask": "0x0000000c", 
+                "mask": "0x00000004", 
                 "offset": 2
               }
             }, 
@@ -314,83 +312,83 @@
             "resetMask": "0x00000000", 
             "displayName": "Debug Exception and Monitor Control Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "VC_CHKERR": {
                 "width": 6, 
                 "access": "read-write", 
-                "mask": "0x00000fc0", 
+                "mask": "0x00000040", 
                 "offset": 6
               }, 
               "VC_MMERR": {
                 "width": 4, 
                 "access": "read-write", 
-                "mask": "0x000000f0", 
+                "mask": "0x00000010", 
                 "offset": 4
               }, 
               "VC_BUSERR": {
                 "width": 8, 
                 "access": "read-write", 
-                "mask": "0x0000ff00", 
+                "mask": "0x00000100", 
                 "offset": 8
               }, 
               "MON_REQ": {
                 "width": 19, 
                 "access": "read-write", 
-                "mask": "0x3ffff80000", 
+                "mask": "0x00080000", 
                 "offset": 19
               }, 
               "VC_NOCPERR": {
                 "width": 5, 
                 "access": "read-write", 
-                "mask": "0x000003e0", 
+                "mask": "0x00000020", 
                 "offset": 5
               }, 
               "VC_INTERR": {
                 "width": 9, 
                 "access": "read-write", 
-                "mask": "0x0003fe00", 
+                "mask": "0x00000200", 
                 "offset": 9
               }, 
               "MON_PEND": {
                 "width": 17, 
                 "access": "read-write", 
-                "mask": "0x3fffe0000", 
+                "mask": "0x00020000", 
                 "offset": 17
               }, 
               "VC_STATERR": {
                 "width": 7, 
                 "access": "read-write", 
-                "mask": "0x00003f80", 
+                "mask": "0x00000080", 
                 "offset": 7
               }, 
               "VC_HARDERR": {
                 "width": 10, 
                 "access": "read-write", 
-                "mask": "0x000ffc00", 
+                "mask": "0x00000400", 
                 "offset": 10
               }, 
               "TRCENA": {
                 "width": 24, 
                 "access": "read-write", 
-                "mask": "0xffffff000000", 
+                "mask": "0x01000000", 
                 "offset": 24
               }, 
               "VC_CORERESET": {
                 "width": 0, 
                 "access": "read-write", 
-                "mask": "0x00000000", 
+                "mask": "0x00000001", 
                 "offset": 0
               }, 
               "MON_EN": {
                 "width": 16, 
                 "access": "read-write", 
-                "mask": "0xffff0000", 
+                "mask": "0x00010000", 
                 "offset": 16
               }, 
               "MON_STEP": {
                 "width": 18, 
                 "access": "read-write", 
-                "mask": "0xffffc0000", 
+                "mask": "0x00040000", 
                 "offset": 18
               }
             }, 
@@ -402,17 +400,17 @@
             "resetMask": "0x00000000", 
             "displayName": "Debug Core Register Selector Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "REGSEL": {
                 "width": 0, 
                 "access": "read-write", 
-                "mask": "0x00000000", 
+                "mask": "0x0000003f", 
                 "offset": 0
               }, 
               "REGWnR": {
                 "width": 16, 
                 "access": "read-write", 
-                "mask": "0xffff0000", 
+                "mask": "0x00010000", 
                 "offset": 16
               }
             }, 
@@ -424,29 +422,29 @@
             "resetMask": "0x00000000", 
             "displayName": "Debug Halt Control and Status Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "S_LOCKUP": {
                 "width": 19, 
                 "access": "read-only", 
-                "mask": "0x3ffff80000", 
+                "mask": "0x00080000", 
                 "offset": 19
               }, 
               "S_SLEEP": {
                 "width": 18, 
                 "access": "read-only", 
-                "mask": "0xffffc0000", 
+                "mask": "0x00040000", 
                 "offset": 18
               }, 
               "S_RETIRE_ST": {
                 "width": 24, 
                 "access": "read-only", 
-                "mask": "0xffffff000000", 
+                "mask": "0x01000000", 
                 "offset": 24
               }, 
               "C_STEP": {
                 "width": 2, 
                 "access": "read-write", 
-                "mask": "0x0000000c", 
+                "mask": "0x00000004", 
                 "offset": 2
               }, 
               "C_HALT": {
@@ -458,31 +456,31 @@
               "S_HALT": {
                 "width": 17, 
                 "access": "read-only", 
-                "mask": "0x3fffe0000", 
+                "mask": "0x00020000", 
                 "offset": 17
               }, 
               "C_SNAPSTALL": {
                 "width": 5, 
                 "access": "read-write", 
-                "mask": "0x000003e0", 
+                "mask": "0x00000020", 
                 "offset": 5
               }, 
               "C_DEBUGEN": {
                 "width": 0, 
                 "access": "read-write", 
-                "mask": "0x00000000", 
+                "mask": "0x00000001", 
                 "offset": 0
               }, 
               "S_RESET_ST": {
                 "width": 25, 
                 "access": "read-only", 
-                "mask": "0x3fffffe000000", 
+                "mask": "0x02000000", 
                 "offset": 25
               }, 
               "C_MASKINTS": {
                 "width": 3, 
                 "access": "read-write", 
-                "mask": "0x00000038", 
+                "mask": "0x00000008", 
                 "offset": 3
               }, 
               "DBGKEY": {
@@ -494,7 +492,7 @@
               "S_REGRDY": {
                 "width": 16, 
                 "access": "read-only", 
-                "mask": "0xffff0000", 
+                "mask": "0x00010000", 
                 "offset": 16
               }
             }, 
@@ -513,7 +511,7 @@
             "resetMask": "0x00000000", 
             "displayName": "Application Interrupt and Reset Control Register", 
             "resetValue": "0x00000000", 
-            "bitfields": {
+            "bitFields": {
               "VECTCLRACTIVE": {
                 "width": 1, 
                 "access": "read-write", 
@@ -523,13 +521,13 @@
               "PRIGROUP": {
                 "width": 8, 
                 "access": "read-write", 
-                "mask": "0x0000ff00", 
+                "mask": "0x00000700", 
                 "offset": 8
               }, 
               "ENDIANNESS": {
                 "width": 15, 
                 "access": "read-write", 
-                "mask": "0x3fff8000", 
+                "mask": "0x00008000", 
                 "offset": 15
               }, 
               "VECTKEY": {
@@ -541,13 +539,13 @@
               "VECTRESET": {
                 "width": 0, 
                 "access": "read-write", 
-                "mask": "0x00000000", 
+                "mask": "0x00000001", 
                 "offset": 0
               }, 
               "SYSRESETREQ": {
                 "width": 2, 
                 "access": "read-write", 
-                "mask": "0x0000000c", 
+                "mask": "0x00000004", 
                 "offset": 2
               }
             }, 
@@ -559,6 +557,8 @@
         "address": "0xe000ed00"
       }
     }, 
-    "bus_width": 32
+    "laneWidth": 32, 
+    "displayName": "ARM Cortex-M3", 
+    "busWidth": 32
   }
 }

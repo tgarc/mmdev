@@ -1,5 +1,5 @@
-from jcfg_dump import JCFGDumper
+from jsvon_dump import JSVONDumper
 
 DUMPERS = { 
-            'json': JCFGDumper, 
+            'json': JSVONDumper, 
           }

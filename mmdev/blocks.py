@@ -1,6 +1,7 @@
 from mmdev import utils
 import logging
 import re
+import os
 from operator import attrgetter
 import textwrap
 import json
@@ -15,28 +16,43 @@ class MetaBlock(type):
         clsattrs = attrs.get('_attrs', ())
         if isinstance(clsattrs, basestring):
             clsattrs = [clsattrs,]
+        clsalias = attrs.get('_alias', {}).keys()
 
         # inherit all _attrs from base classes
-        clsattrs = list(clsattrs)
+        clsattrs = list(clsattrs) + clsalias
+        macrokey = attrs.get('_macrokey', None)
         for b in bases:
             if type(b) is not MetaBlock:
                 continue
+            if macrokey is None and hasattr(b, '_macrokey'):
+                macrokey = b._macrokey
+                attrs['_macrokey'] = macrokey
             newattrs = getattr(b, '_attrs', ())
             if isinstance(newattrs, basestring):
                 newattrs = [newattrs,]
-            clsattrs.extend(list(newattrs))
+            newalias = getattr(b, '_alias', {}).keys()
+            clsattrs.extend(list(newattrs) + newalias)
         clsattrs = list(set(clsattrs))
 
         # allow for aliasing _attrs
         for lnk, trgt in attrs.get('_alias', {}).items():
             clsattrs.remove(trgt)   # target attr will no longer be visible from
                                     # the attrs dict
-            clsattrs.append(lnk)    # alias attr will replace target attr 
-            trgt = '_'+trgt
-            lnk = '_'+lnk
-            attrs[lnk] = property(lambda self: getattr(self, trgt), lambda self, v: setattr(self, trgt, v))
 
-        attrs['_attrs'] = tuple(clsattrs)
+            if trgt in attrs.get('_fmt', ''):
+                attrs['_fmt'] = attrs['_fmt'].replace(trgt, lnk)
+            if trgt == attrs.get('_macrokey', None):
+                attrs['_macrokey'] = lnk
+
+            # note to self: 
+            # always evaluate expressions being used inside a dynamically
+            # created function
+            # (or that variable will change and your result will change on the
+            # next function call) :p
+            attrs['_'+lnk] = property(lambda self, trgt='_'+trgt: getattr(self, trgt), 
+                                      lambda self, v, trgt='_'+trgt: setattr(self, trgt, v))
+
+        attrs['_attrs'] = clsattrs
         return super(MetaBlock, cls).__new__(cls, name, bases, attrs)
 
 
@@ -213,7 +229,7 @@ class Block(LeafBlock):
     def to_dict(self, recursive=False):
         blkdict = self._scrubbed_attrs
         for blk in self:
-            key = blk._typename.lower()+'s'
+            key = blk._typename[0].lower() + blk._typename[1:] + 's'
             if key not in blkdict:
                 blkdict[key] = {}
             if recursive:
@@ -475,10 +491,10 @@ class DeviceBlock(Block):
         Shorthand or abbreviated name of block.
     subblocks : list-like
         All the children of this block.
-    lane_width : int
+    laneWidth : int
         Defines the number of data bits uniquely selected by each address. For
         example, a value of 8 denotes that the device is byte-addressable.
-    bus_width : int
+    busWidth : int
         Defines the bit-width of the maximum single data transfer supported by
         the bus infrastructure. For example, a value of 32 denotes that the
         device bus can transfer a maximum of 32 bits in a single transfer.
@@ -491,15 +507,15 @@ class DeviceBlock(Block):
         A string describing functionality, usage, and other relevant notes about
         the block.
     """
-    _attrs = 'lane_width', 'bus_width'
+    _attrs = 'laneWidth', 'busWidth'
 
-    def __init__(self, mnemonic, subblocks, lane_width, bus_width, 
+    def __init__(self, mnemonic, subblocks, laneWidth, busWidth, 
                  bind=True, displayName='', descr='', kwattrs={}):
         super(DeviceBlock, self).__init__(mnemonic, subblocks, 
                                           bind=bind, displayName=displayName,
                                           descr=descr, kwattrs=kwattrs)
-        self._lane_width = lane_width
-        self._bus_width = bus_width
+        self._laneWidth = laneWidth
+        self._busWidth = busWidth
 
     def _read(self, address, size):
         raise NotImplementedError

@@ -1,38 +1,15 @@
 from mmdev import blocks, components
-from mmdev.transport import Transport
+from mmdev import transport
+from mmdev import utils
 import devicelink
-import mmdev.utils as utils
 import logging
-from operator import attrgetter
-import time
+
+logger = logging.getLogger(__name__)
 
 
 reverse_bits = lambda b,w: ("{0:0%db}" % w).format(b)[::-1]
 
-IDCODE = 0 << 2
-DP_ACC = 0 << 0
-READ = 1 << 1
-WRITE = 0 << 1
-VALUE_MATCH = 1 << 4
-MATCH_MASK = 1 << 5
-
-ORUNERRCLR = 0b100
-WDERRCLR   = 0b011
-STKERRCLR  = 0b010
-STKCMPCLRa = 0b001
-DAPABORT   = 0b000
-
-APBANKSEL = 0x000000f0
-
 # AP Control and Status Word definitions
-CSW_SIZE     =  0x00000007
-CSW_SIZE8    =  0x00000000
-CSW_SIZE16   =  0x00000001
-CSW_SIZE32   =  0x00000002
-CSW_ADDRINC  =  0x00000030
-CSW_NADDRINC =  0x00000000
-CSW_SADDRINC =  0x00000010
-CSW_PADDRINC =  0x00000020
 CSW_DBGSTAT  =  0x00000040
 CSW_TINPROG  =  0x00000080
 CSW_HPROT    =  0x02000000
@@ -40,8 +17,6 @@ CSW_MSTRTYPE =  0x20000000
 CSW_MSTRCORE =  0x00000000
 CSW_MSTRDBG  =  0x20000000
 CSW_RESERVED =  0x01000000
-
-CSW_VALUE = (CSW_RESERVED | CSW_MSTRDBG | CSW_HPROT | CSW_DBGSTAT | CSW_SADDRINC)
 
 
 CSW = components.Register('CSW', 
@@ -254,55 +229,7 @@ can be accessed multiple times. It always return the same value until a new
 access is made to the DP RDBUFF register or to an AP register.""")
 
 
-class Port(components.Peripheral):
-    """
-    Models a generic hardware block that lives in an address space *and* defines
-    it's own independent address space.
-
-    Parameters
-    ----------
-    mnemonic : str
-        Shorthand or abbreviated name of block.
-    subblocks : list-like
-        All the children of this block.
-    port : int
-        The 'port' address of this block.
-    lane_width : int
-        Defines the number of data bits uniquely selected by each address. For
-        example, a value of 8 denotes that the device is byte-addressable.
-    bus_width : int
-        Defines the bit-width of the maximum single data transfer supported by
-        the bus infrastructure. For example, a value of 32 denotes that the
-        device bus can transfer a maximum of 32 bits in a single transfer.
-    byte_size : int
-        Size of block in bytes.
-    bind : bool
-        Tells the constructor whether or not to bind the subblocks as attributes
-        of the Block instance.
-    displayName : str
-        Expanded name or display name of block.
-    descr : str
-        A string describing functionality, usage, and other relevant notes about
-        the block.
-    """
-    _dynamicBinding = True
-    _fmt="{displayName} ({mnemonic}, {port})"
-    _alias = { 'port' : 'address' }
-    _attrs = 'lane_width', 'bus_width'
-
-    def __init__(self, mnemonic, registers, port, byte_size, lane_width, bus_width,
-                 bind=True, displayName='', descr='', kwattrs={}):
-        super(Port, self).__init__(mnemonic, registers, port, byte_size,
-                                   bind=bind, displayName=displayName, descr=descr,
-                                   kwattrs=kwattrs)
-        self._lane_width = lane_width
-        self._bus_width = bus_width
-
-        for blk in self.walk():
-            blk.root = self
-
-
-class AccessPort(Port):
+class AccessPort(components.Port):
     # IDR = IDR # all access ports require an IDR
 
     def _read(self, address, size):
@@ -314,7 +241,7 @@ class AccessPort(Port):
         self.root.write(1, address&0xF, value)
 
 
-class DebugPort(Port):
+class DebugPort(components.Port):
 
     def _read(self, address, size):
         return self.root.read(0, address)
@@ -377,7 +304,7 @@ class DAPLink(devicelink.DeviceLink, blocks.DeviceBlock):
         super(DAPLink, self).connect()
 
         # read ID code to confirm synchronization
-        logging.info('IDCODE: %s', self.DP.IDCODE.value)
+        logger.info('IDCODE: %s', self.DP.IDCODE.value)
 
         # clear errors
         self.DP.ABORT = 0x1F
@@ -407,23 +334,23 @@ class DAPLink(devicelink.DeviceLink, blocks.DeviceBlock):
         # Prod for support of transfers smaller than 32 bits
         self.MEMAP.CSW.SIZE = 0
         if self.MEMAP.CSW.SIZE == 0:
-            self._lane_width = 8 << 0
+            self._laneWidth = 8 << 0
             return
 
         self.MEMAP.CSW.SIZE = 1
         if self.MEMAP.CSW.SIZE == 1:
-            self._lane_width = 8 << 1
+            self._laneWidth = 8 << 1
             return
 
-        self._lane_width = 8 << 2
+        self._laneWidth = 8 << 2
 
     def probe(self):
         baseaddr = self.MEMAP.BASE.BASEADDR.value
         self.MEMAP.TAR = baseaddr << self.MEMAP.BASE.BASEADDR._address
         try:
             read = self.MEMAP.DRW.value
-        except Transport.TransferFault:
-            raise DeviceLink.DeviceLinkException("No such luck. Base address of the debug components is inaccessible.")
+        except transport.FaultResponse:
+            raise devicelink.DeviceLinkException("No such luck. Base address of the debug components is inaccessible.")
 
     def apselect(self, port, bank):
         apsel = self.DP.SELECT.APSEL.value
@@ -439,7 +366,7 @@ class DAPLink(devicelink.DeviceLink, blocks.DeviceBlock):
 
         try:
             self.transport.sendRequest(APnDP, 1, address & 0x0F)
-        except Transport.FaultResponse:
+        except transport.FaultResponse:
             self.DP.ABORT.STKERRCLR = 1
             raise
 
@@ -451,7 +378,7 @@ class DAPLink(devicelink.DeviceLink, blocks.DeviceBlock):
 
         try:
             self.transport.sendRequest(APnDP, 0, address & 0x0F)
-        except Transport.FaultResponse:
+        except transport.FaultResponse:
             self.DP.ABORT.STKERRCLR = 1
             raise
 

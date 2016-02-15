@@ -1,4 +1,36 @@
 import StringIO
+import os
+import ctypes
+
+_bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+                    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
+
+def get_mask_offset(mask):
+    cmask = ctypes.c_uint32(mask).value
+    # calculate the bit offset from the mask using a debruijn hash function
+    # use ctypes to truncate the result to a uint32
+    # TODO: change to a 64 bit version of the lookup
+    return _bruijn32lookup[ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
+
+def from_devfile(devfile, file_format=None, raiseErr=True):
+    """
+    Parse a device file using the given file format. If file format is not
+    given, file extension will be used.
+
+    Supported Formats:
+        + 'json' : JSON
+        + 'svd'  : CMSIS-SVD
+    """
+    from mmdev import parsers
+
+    if file_format is None:
+        file_format = os.path.splitext(devfile)[1][1:]
+    try:
+        parsercls = parsers.PARSERS[file_format]
+    except KeyError:
+        raise KeyError("File extension '%s' not recognized" % file_format)
+
+    return parsercls.from_devfile(devfile)
 
 
 class HexValue(int):

@@ -21,10 +21,10 @@ class Device(blocks.DeviceBlock):
         Shorthand or abbreviated name of block.
     subblocks : list-like
         All the children of this block.
-    lane_width : int
+    laneWidth : int
         Defines the number of data bits uniquely selected by each address. For
         example, a value of 8 denotes that the device is byte-addressable.
-    bus_width : int
+    busWidth : int
         Defines the bit-width of the maximum single data transfer supported by
         the bus infrastructure. For example, a value of 32 denotes that the
         device bus can transfer a maximum of 32 bits in a single transfer.
@@ -40,8 +40,8 @@ class Device(blocks.DeviceBlock):
     _fmt = "{displayName} ({mnemonic}, {vendor})"
     _attrs = 'vendor'
 
-    def __init__(self, mnemonic, peripherals, lane_width, bus_width, cpu=None, vendor='Unknown Vendor', **kwargs):
-        blocks.DeviceBlock.__init__(self, mnemonic, peripherals, lane_width, bus_width, **kwargs)
+    def __init__(self, mnemonic, peripherals, laneWidth, busWidth, cpu=None, vendor='Unknown Vendor', **kwargs):
+        blocks.DeviceBlock.__init__(self, mnemonic, peripherals, laneWidth, busWidth, **kwargs)
 
         self.cpu = cpu
         self._vendor = vendor
@@ -59,7 +59,7 @@ class Device(blocks.DeviceBlock):
         # purely for readability, set the address width for peripherals and
         # registers
         for blk in self.walk(d=2):
-            blk._macrovalue = utils.HexValue(blk._macrovalue, self._bus_width)
+            blk._macrovalue = utils.HexValue(blk._macrovalue, self._busWidth)
 
         for blk in self.walk():
             blk.root = self
@@ -82,13 +82,13 @@ class Device(blocks.DeviceBlock):
     # defer to a DeviceLink to read/write memory
     def _write(self, address, value, accessSize=None):
         if accessSize is None:
-            accessSize = self._bus_width
+            accessSize = self._busWidth
         self.link.memWrite(address, value, accessSize)
     write = _write
     
     def _read(self, address, accessSize=None):
         if accessSize is None:
-            accessSize = self._bus_width
+            accessSize = self._busWidth
         return utils.HexValue(self.link.memRead(address, accessSize), accessSize)
     read = _read
 
@@ -96,7 +96,7 @@ class Device(blocks.DeviceBlock):
     #     data = []
 
     #     # First align the address
-    #     modbits = address % self._lane_width
+    #     modbits = address % self._laneWidth
     #     address -= modbits
     #     bitlen -= modbits
     #     xferlen = align*bool(modbits)
@@ -104,7 +104,7 @@ class Device(blocks.DeviceBlock):
     #     address += xferlen
 
     #     # Read the rest of the data in the largest aligned transfers possible
-    #     xferwidth = self._bus_width
+    #     xferwidth = self._busWidth
     #     while bitlen:
     #         xferlen = xferwidth * (bitlen // xferwidth)
     #         data += self.link.memRead(address, xferlen)
@@ -116,7 +116,7 @@ class Device(blocks.DeviceBlock):
 
     # def write(self, address, data, bitlen):
     #     # First align the address
-    #     modbits = address % self._lane_width
+    #     modbits = address % self._laneWidth
     #     address -= modbits
     #     bitlen -= modbits
     #     xferlen = align*bool(modbits)
@@ -124,7 +124,7 @@ class Device(blocks.DeviceBlock):
     #     address += xferlen
 
     #     # Read the rest of the data in the largest aligned transfers possible
-    #     xferwidth = self._bus_width
+    #     xferwidth = self._busWidth
     #     while bitlen:
     #         xferlen = xferwidth * (bitlen // xferwidth)
     #         self.link.memWrite(address, data.pop(), xferlen)
@@ -142,7 +142,8 @@ class Device(blocks.DeviceBlock):
         res = self.findall(key)
         if len(res):
             return res[0]
-        return res
+        else:
+            raise ValueError("%s was not found")
 
     def findall(self, key):
         res = self._map.get(key)
@@ -170,17 +171,17 @@ class Device(blocks.DeviceBlock):
             raise KeyError("Extension '%s' not recognized" % file_format)
         return parse(devfile, raiseErr=raiseErr)
 
-    def to_devfile(self, file_format):
-        """
-        Parse a device file using the given file format. If file format is not
-        given, file extension will be used.
+    # def to_devfile(self, file_format):
+    #     """
+    #     Parse a device file using the given file format. If file format is not
+    #     given, file extension will be used.
 
-        Supported Formats:
-            + 'json' : JSON
-        """
-        from mmdev import dumpers
-        try:
-            dump = dumpers.DUMPERS[file_format]
-        except KeyError:
-            raise KeyError("File format '%s' not recognized" % file_format)
-        return dump(self)
+    #     Supported Formats:
+    #         + 'json' : JSON
+    #     """
+    #     from mmdev import dumpers
+    #     try:
+    #         dump = dumpers.DUMPERS[file_format]
+    #     except KeyError:
+    #         raise KeyError("File format '%s' not recognized" % file_format)
+    #     return dump(self)

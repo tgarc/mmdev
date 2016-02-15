@@ -1,3 +1,7 @@
+class DeviceLinkException(Exception):
+    pass
+
+
 class DeviceLink(object):
     """
     Provides an interface through which user can send/receive data, as well as
@@ -9,10 +13,6 @@ class DeviceLink(object):
     transport : mmdev.transport.Transport
         Specifies a transport protocol to use.
     """
-
-    class DeviceLinkException(Exception):
-        pass
-
     def __init__(self, transport):
         self.transport = transport
 
