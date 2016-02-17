@@ -1,4 +1,8 @@
-from devicelink import DeviceLink
+import logging
+from mmdev.devicelink import DeviceLink
+from mmdev.transport import MockTransport
+
+logger = logging.getLogger(__name__)
 
 
 class MockLink(DeviceLink):
@@ -7,15 +11,18 @@ class MockLink(DeviceLink):
     """
     def __init__(self):
         super(MockLink, self).__init__()
+        self.transport = MockTransport()
         self.values = {}
 
     def memWrite(self, addr, value, accessSize=32):
         self.values[addr] = value
-        print "0x%08x <= 0x%08x" % (addr, value)
+        self.transport.sendPacket(addr, value)
+        logger.debug(("{:#x} <= {:#%dx}" % (accessSize>>2)).format(addr, value))
 
     def memRead(self, addr, accessSize=32):
         value = self.values.get(addr, 0)
-        print "0x%08x => 0x%08x" % (addr, value)
+        self.transport.readPacket(addr)
+        logger.debug(("{:#x} => {:#%dx}" % (accessSize>>2)).format(addr, value))
         return value
 
     def reset(self):

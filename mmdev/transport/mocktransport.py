@@ -1,9 +1,15 @@
+from mmdev.datalink import MockDataLink
+from mmdev.transport import Transport
 import logging 
 
 logger = logging.getLogger(__name__)
 
 
-class MockTransport(object):
+class MockTransport(Transport):
+
+    def __init__(self, datalink=None):
+        self.datalink = MockDataLink()
+
     def sendPacket(self, *args, **kwargs):
         logger.debug("Transport <= %s %s" % (args, kwargs))
         self.datalink.write(*args, **kwargs)

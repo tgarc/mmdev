@@ -1,0 +1,423 @@
+{
+  "debugAccessPort": {
+    "mnemonic": "DAP", 
+    "laneWidth": 32, 
+    "displayName": "Debug Access Port", 
+      "accessPorts": {
+      "MEMAP": {
+        "laneWidth": 32, 
+        "displayName": "Memory Access Port", 
+        "description": "A MEM-AP provides a DAP with access to a memory subsystem. Another way of\ndescribing the operation of a MEM-AP is that:\n\n1) A debug component implements a memory-mapped abstraction of a set of resources.\n2) The MEM-AP provides AP access to those resources.\n\nHowever, an access to a MEM-AP might only access a register within the MEM-AP,\nwithout generating a memory access.", 
+        "busWidth": 32, 
+        "registers": {
+          "BASE": {
+            "resetMask": "0x00000000", 
+            "displayName": "Debug Base Address Register", 
+            "description": "The BASE Register provides an index into the connected memory-mapped\nresource. This index value points to one of the following:\n\n1) the start of a set of debug registers.\n\n2) a ROM table that describes the connected debug components.", 
+            "resetValue": "0x00000000", 
+            "bitFields": {
+              "PRESENT": {
+                "displayName": "Entry Present", 
+                "description": "This field indicates whether a debug entry is present for this MEM-AP.", 
+                "mask": "0x00000001", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 0
+              }, 
+              "BASEADDR": {
+                "displayName": "Base Address", 
+                "description": "Bits [31:12] of the address offset, in the memory-mapped resource, of the start\nof the debug register space or a ROM table address. Bits [11:0] of the address offset are 0x000.", 
+                "mask": "0xfffff000", 
+                "access": "read-write", 
+                "width": 20, 
+                "offset": 12
+              }, 
+              "FORMAT": {
+                "displayName": "Format", 
+                "description": "This bit must read as 1, to indicate ARM Debug Interface v5 format.", 
+                "mask": "0x00000001", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 0
+              }
+            }, 
+            "access": "read-only", 
+            "address": "0xf8", 
+            "size": 32
+          }, 
+          "TAR": {
+            "resetMask": "0x00000000", 
+            "displayName": "Transfer Address Register", 
+            "description": "The TAR holds the address for the next access to the memory system, or set\nof debug resources, connected to the MEM-AP. The MEM-AP can be configured so\nthat the TAR is incremented automatically after each memory access. Reading or\nwriting to the TAR does not cause a memory access.", 
+            "resetValue": "0x00000000", 
+            "access": "read-write", 
+            "address": "0x04", 
+            "size": 32
+          }, 
+          "CFG": {
+            "resetMask": "0x00000000", 
+            "displayName": "Configuration Register", 
+            "description": "The CFG Register provides information about the configuration of the MEM-AP\nimplementation.", 
+            "resetValue": "0x00000000", 
+            "bitFields": {
+              "BIGENDIAN": {
+                "displayName": "Big-endian", 
+                "description": "This field indicates whether memory accesses by the MEM-AP are big-endian or\nlittle-endian", 
+                "mask": "0x00000001", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 0
+              }
+            }, 
+            "access": "read-only", 
+            "address": "0xf4", 
+            "size": 32
+          }, 
+          "CSW": {
+            "resetMask": "0x00000000", 
+            "displayName": "Control Status Word", 
+            "description": "The CSW holds control and status information for the MEM-AP.", 
+            "resetValue": "0x00000000", 
+            "bitFields": {
+              "PROT": {
+                "displayName": "Bus Access Protection Control", 
+                "description": "This field enables the debugger to specify protection flags for a debug\naccess.", 
+                "mask": "0x7f000000", 
+                "access": "read-write", 
+                "width": 7, 
+                "offset": 24
+              }, 
+              "ADDRINC": {
+                "enumeratedValues": {
+                  "ADDRINCP": {
+                    "description": "Increment packed If Packed transfers are supported. When Packed transfers are\nnot supported, value b10 is Reserved.", 
+                    "value": "0x2"
+                  }, 
+                  "ADDRINCS": {
+                    "description": "Increment single Always.", 
+                    "value": "0x1"
+                  }, 
+                  "NADDRINC": {
+                    "description": "Auto-increment off Always.", 
+                    "value": "0x0"
+                  }
+                }, 
+                "displayName": "Address Increment", 
+                "description": "Address auto-increment and packing mode. This field controls whether the access\naddress increments automatically on read and write data accesses through the\nData Read/Write Register.", 
+                "mask": "0x00000030", 
+                "access": "read-write", 
+                "width": 2, 
+                "offset": 4
+              }, 
+              "SIZE": {
+                "description": "Byte size of the access to perform", 
+                "mask": "0x00000007", 
+                "access": "read-write", 
+                "width": 3, 
+                "offset": 0
+              }
+            }, 
+            "access": "read-write", 
+            "address": "0x00", 
+            "size": 32
+          }, 
+          "IDR": {
+            "resetMask": "0x00000000", 
+            "displayName": "Identification Register", 
+            "description": "The Identification Register identifies the Access Port. It is a read-only\nregister, implemented in the last word of the AP register space, at offset 0xFC.\nAn IDR of zero indicates that no AP is present.", 
+            "resetValue": "0x00000000", 
+            "access": "read-only", 
+            "address": "0xfc", 
+            "size": 32
+          }, 
+          "DRW": {
+            "resetMask": "0x00000000", 
+            "displayName": "Data Read/Write", 
+            "description": "The DRW is used for memory accesses: \n1) Writing to the DRW initiates a write to the address specified by the TAR.  \n2) Reading from the DRW initiates a read from the address specified by the\nTAR. When the read access completes, the value is returned from the DRW.", 
+            "resetValue": "0x00000000", 
+            "access": "read-write", 
+            "address": "0x0c", 
+            "size": 32
+          }
+        }, 
+        "port": "0x0", 
+        "size": "0x100"
+      }
+      },
+    "debugPort": {
+        "mnemonic": "DP",
+        "laneWidth": 32, 
+        "displayName": "Debug Port", 
+        "description": "An ARM Debug Interface implementation includes a single Debug Port (DP), that provides the external\nphysical connection to the interface. The ARM Debug Interface v5 specification supports two DP\nimplementations:\n\n1) The JTAG Debug Port (JTAG-DP).\n2) The Serial Wire Debug Port (SW-DP).\n\nThese alternative DP implementations provide different mechanisms for making\nAccess Port and Debug Port accesses. However, they have a number of common\nfeatures. In particular, each implementation provides:\n\n1) A means of identifying the DAP, using an identification code scheme.\n2) A means of making DP and AP accesses.\n3) A means of aborting a register access that appears to have faulted.", 
+        "busWidth": 32, 
+        "registers": {
+          "ABORT": {
+            "resetMask": "0x00000000", 
+            "displayName": "AP Abort", 
+            "description": "The AP Abort Register", 
+            "resetValue": "0x00000000", 
+            "bitFields": {
+              "ORUNERRCLR": {
+                "displayName": "Overrun Error Clear", 
+                "description": "Write 1 to this bit to clear the STICKYORUN overrun error flag to 0.", 
+                "mask": "0x00000010", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 4
+              }, 
+              "WDERRCLR": {
+                "displayName": "Write Data Error Clear", 
+                "description": "Write 1 to this bit to clear the WDATAERR write data error flag to 0", 
+                "mask": "0x00000008", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 3
+              }, 
+              "STKCMPCLRa": {
+                "displayName": "Sticky Compare Error Clear", 
+                "description": "Write 1 to this bit to clear the STICKYCMP sticky compare flag to 0.", 
+                "mask": "0x00000002", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 1
+              }, 
+              "DAPABORT": {
+                "displayName": "DAP Abort", 
+                "description": "Write 1 to this bit to generate a DAP abort. This aborts the current AP\ntransaction. Do this only if the debugger has received WAIT responses over an\nextended period.", 
+                "mask": "0x00000001", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 0
+              }, 
+              "STKERRCLR": {
+                "displayName": "Sticky Error Clear", 
+                "description": "Write 1 to this bit to clear the STICKYERR sticky error flag to 0.", 
+                "mask": "0x00000004", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 2
+              }
+            }, 
+            "access": "write-only", 
+            "address": "0x0", 
+            "size": 32
+          }, 
+          "CTRLSTAT": {
+            "resetMask": "0x00000000", 
+            "displayName": "DP Control/Status", 
+            "description": "The Control/Status Register is always present on all DP\nimplementations. Its provides control of the DP, and status information about\nthe DP.", 
+            "resetValue": "0x00000000", 
+            "bitFields": {
+              "CDBGRSTACK": {
+                "displayName": "Debug Reset Acknowledge", 
+                "mask": "0x08000000", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 27
+              }, 
+              "TRNMODE": {
+                "displayName": "Transfer Mode", 
+                "description": "This field sets the transfer mode for AP operations.", 
+                "mask": "0x0000000c", 
+                "access": "read-write", 
+                "width": 2, 
+                "offset": 2
+              }, 
+              "STICKYERR": {
+                "displayName": "Sticky Error", 
+                "description": "This bit is set to 1 if an error is returned by an AP transaction.", 
+                "mask": "0x00000020", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 5
+              }, 
+              "CSYSPWRUPACK": {
+                "displayName": "System Power Up Acknowledge", 
+                "mask": "0x80000000", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 31
+              }, 
+              "MASKLANE": {
+                "description": "Indicates the bytes to be masked in pushed compare and pushed verify\noperations.", 
+                "mask": "0x00000f00", 
+                "access": "read-write", 
+                "width": 4, 
+                "offset": 8
+              }, 
+              "CDBGPWRUPREQ": {
+                "displayName": "Debug Power Up Request", 
+                "mask": "0x10000000", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 28
+              }, 
+              "STICKYCMP": {
+                "displayName": "Sticky Compare", 
+                "description": "This bit is set to 1 when a match occurs on a pushed compare or a pushed verify operation.", 
+                "mask": "0x00000010", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 4
+              }, 
+              "WDATAERR": {
+                "displayName": "Write Data Error", 
+                "description": "This bit is set to 1 if a Write Data Error occurs. This happens if:\n\n1) There is a a parity or framing error on the data phase of a write.\n2) A write that has been accepted by the DP is then discarded without being\nsubmitted to the AP.\n\nThis bit can only be cleared to 0 by writing 1 to the WDERRCLR field of the AP\nAbort Register, see The AP Abort Register.  After a power-on\nreset this bit is 0.", 
+                "mask": "0x00000080", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 7
+              }, 
+              "READOK": {
+                "description": "This bit is set to 1 if the response to the previous AP or RDBUFF read was\nOK. It is cleared to 0 if the response was not OK.", 
+                "mask": "0x00000040", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 6
+              }, 
+              "CSYSPWRUPREQ": {
+                "displayName": "System Power Up Request", 
+                "mask": "0x40000000", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 30
+              }, 
+              "CDBGRSTREQ": {
+                "displayName": "Debug Reset Request", 
+                "mask": "0x04000000", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 26
+              }, 
+              "STICKYORUN": {
+                "displayName": "Sticky Overrun", 
+                "description": "If overrun detection is enabled, this bit is set to 1 when an overrun occurs.", 
+                "mask": "0x00000002", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 1
+              }, 
+              "TRNCNT": {
+                "displayName": "Transaction Counter", 
+                "mask": "0x00fff000", 
+                "access": "read-write", 
+                "width": 12, 
+                "offset": 12
+              }, 
+              "ORUNDETECT": {
+                "displayName": "Overrun Detect", 
+                "description": "This bit is set to 1 to enable overrun detection.", 
+                "mask": "0x00000001", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 0
+              }, 
+              "CDBGPWRUPACK": {
+                "displayName": "Debug Power Up Acknowledge", 
+                "mask": "0x20000000", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 29
+              }
+            }, 
+            "access": "read-write", 
+            "address": "0x4", 
+            "size": 32
+          }, 
+          "IDCODE": {
+            "resetMask": "0x00000000", 
+            "displayName": "Identification Code", 
+            "description": "The Identification Code Register is always present on all DP implementations. It\nprovides identification information about the ARM Debug Interface.", 
+            "resetValue": "0x00000000", 
+            "access": "read-only", 
+            "address": "0x0", 
+            "size": 32
+          }, 
+          "WCR": {
+            "resetMask": "0x00000000", 
+            "displayName": "Wire Control Register", 
+            "description": "The Wire Control Register is always present on any SW-DP implementation. Its\npurpose is to select the operating mode of the physical serial port connection\nto the SW-DP. On a SW-DP, the WCR is a read/write register at address 0x4 on\nread and write operations when the CTRLSEL bit in the Select Register is set to\n1.", 
+            "resetValue": "0x00000000", 
+            "access": "read-write", 
+            "address": "0x4", 
+            "size": 32
+          }, 
+          "RDBUFF": {
+            "resetMask": "0x00000000", 
+            "displayName": "Read Buffer", 
+            "description": "On a SW-DP, performing a read of the Read Buffer captures data from the AP,\npresented as the result of a previous read, without initiating a new AP\ntransaction. This means that reading the Read Buffer returns the result of the\nlast AP read access, without generating a new AP access. After you have read\nthe Read Buffer, its contents are no longer valid. The result of a second read\nof the Read Buffer is UNPREDICTABLE.", 
+            "resetValue": "0x00000000", 
+            "access": "read-only", 
+            "address": "0xc", 
+            "size": 32
+          }, 
+          "SELECT": {
+            "resetMask": "0x00000000", 
+            "displayName": "Select", 
+            "description": "The AP Select Register is always present on all DP implementations. Its\nmain purpose is to select the current Access Port (AP) and the active four-word\nregister bank within that AP.", 
+            "resetValue": "0x00000000", 
+            "bitFields": {
+              "APSEL": {
+                "displayName": "AP Select", 
+                "description": "Selects the current AP.", 
+                "mask": "0xff000000", 
+                "access": "read-write", 
+                "width": 8, 
+                "offset": 24
+              }, 
+              "APBANKSEL": {
+                "displayName": "AP Bank Select", 
+                "description": "Selects the active four-word register bank on the current AP", 
+                "mask": "0x000000f0", 
+                "access": "read-write", 
+                "width": 4, 
+                "offset": 4
+              }, 
+              "CTRLSEL": {
+                "enumeratedValues": {
+                  "CSRSEL": {
+                    "description": "Control Status Register", 
+                    "value": "0x0"
+                  }, 
+                  "WCRSEL": {
+                    "description": "Wire Control Register", 
+                    "value": "0x1"
+                  }
+                }, 
+                "displayName": "CTRL Select", 
+                "description": "SW-DP Debug Port address bank select. Controls which DP register is selected at\naddress b01 on a SW-DP.", 
+                "mask": "0x00000001", 
+                "access": "read-write", 
+                "width": 1, 
+                "offset": 0
+              }
+            }, 
+            "access": "write-only", 
+            "address": "0x8", 
+            "size": 32
+          }, 
+          "RESEND": {
+            "resetMask": "0x00000000", 
+            "displayName": "Read Resend", 
+            "description": "Performing a read to the RESEND register does not capture new data from the\nAP. It returns the value that was returned by the last AP read or DP RDBUFF\nread.  Reading the RESEND register enables the read data to be recovered from a\ncorrupted SW transfer without having to re-issue the original read request or\ngenerate a new access to the connected debug memory system.  The RESEND register\ncan be accessed multiple times. It always return the same value until a new\naccess is made to the DP RDBUFF register or to an AP register.", 
+            "resetValue": "0x00000000", 
+            "bitFields": {
+              "RESEND": {
+                "description": "The value that was returned by the last AP read or DP RDBUFF read.", 
+                "mask": "0xffffffff", 
+                "access": "read-write", 
+                "width": 32, 
+                "offset": 0
+              }
+            }, 
+            "access": "read-only", 
+            "address": "0x8", 
+            "size": 32
+          }
+        }, 
+        "port": "0x0", 
+        "size": "0x10"
+    },
+    "busWidth": 32
+  }
+}

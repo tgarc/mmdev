@@ -2,23 +2,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class DataLink(object):
+class MockDataLink(object):
     """
     Provides an interface to the physical link over which a host communicates to
     a target debug port. This is most commonly used as an interface to a USB
     driver.
     """
-    class DeviceLinkException(Exception):
-        pass
-
     def connect(self):
-        raise NotImplementedError
+        return
 
     def disconnect(self):
-        raise NotImplementedError
+        return
 
     def write(self, data, **kwargs):
-        raise NotImplementedError
+        logger.debug("DataLink <= %s %s" % (data, kwargs))
 
     def read(self, *args, **kwargs):
-        raise NotImplementedError
+        logger.debug("DataLink => 0")
+        return 0

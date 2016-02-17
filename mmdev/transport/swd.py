@@ -1,4 +1,4 @@
-import transport
+from transport import Transport
 import logging
 import time
 
@@ -17,7 +17,7 @@ ACK_FAULT = 4
 reverse_bits = lambda b,w: ("{0:0%db}" % w).format(b)[::-1]
 
 
-class SWD(transport.Transport):
+class SWD(Transport):
 
     def connect(self):
         self.datalink.connect()
@@ -75,7 +75,7 @@ class SWD(transport.Transport):
         parity = (parity ^ (parity >> 1)) & 1
 
         if parity ^ presp:
-            raise transport.InvalidResponse("Parity Error")
+            raise self.InvalidResponse("Parity Error")
 
         return data
 
@@ -112,13 +112,13 @@ class SWD(transport.Transport):
             ack = int(ack[3:0:-1],2)
             tries += 1
         if tries == 3:
-            raise transport.BusyResponse("DAP stuck in WAIT state")
+            raise self.BusyResponse("DAP stuck in WAIT state")
 
         if ack==ACK_FAULT:
-            raise transport.FaultResponse('Target responded with FAULT error code')
+            raise self.FaultResponse('Target responded with FAULT error code')
         elif ack==0b111:
-            raise transport.NoACKResponse('No response from target.')
+            raise self.NoACKResponse('No response from target.')
         elif ack!=ACK_OK:
-            raise transport.InvalidResponse('Received invalid ACK ({:#03b})'.format(ack))
+            raise self.InvalidResponse('Received invalid ACK ({:#03b})'.format(ack))
 
         return ack

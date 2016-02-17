@@ -107,6 +107,27 @@ class Port(Peripheral):
             blk.root = self
 
 
+class AccessPort(Port):
+    # IDR = IDR # all access ports require an IDR
+
+    def _read(self, address, size):
+        self.root.apselect(self._port, (address&0xF0) >> 4)
+        return self.root.read(1, address&0xF)
+
+    def _write(self, address, value, size):
+        self.root.apselect(self._port, (address&0xF0) >> 4)
+        self.root.write(1, address&0xF, value)
+
+
+class DebugPort(Port):
+
+    def _read(self, address, size):
+        return self.root.read(0, address)
+
+    def _write(self, address, value, size):
+        self.root.write(0, address, value)
+
+
 class Register(blocks.IOBlock):
     _dynamicBinding = True
     _attrs = 'resetValue', 'resetMask'

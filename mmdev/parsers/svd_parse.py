@@ -168,6 +168,7 @@ class SVDParser(DeviceParser):
     def parse_register(cls, regnode, baseaddr, parent={}, size=None,
                        access=None, protection=None, resetValue=None,
                        resetMask=0):
+
         # These are required even when inheriting from another register
         name       = _readtxt(regnode, 'name', required=True)
         addr       = _readint(regnode, 'addressOffset', required=True) + baseaddr
@@ -242,10 +243,6 @@ class SVDParser(DeviceParser):
         enumvals = bitnode.get('enumeratedValues', parent.get('enumeratedValues', []))
         if len(enumvals):
             # discard 'enumeratedValues' level attributes
-            nodes = list(enumvals)
-            attrs = SVDNode(enumvals)
-            attrs.pop('enumeratedValue')
-            bitnode['enumeratedValues'] = attrs
             enumvals = enumvals.findall('enumeratedValue')
 
         enumvals = cls.parse_subblocks(enumvals, cls.parse_enumerated_value)
@@ -256,9 +253,10 @@ class SVDParser(DeviceParser):
     def parse_enumerated_value(cls, enumnode, parent={}):
         name =_readtxt(enumnode, 'name', parent=parent, required=True)
         descr = _readtxt(enumnode, 'description', '', parent=parent)
-        if _readtxt(enumnode, 'isdefault', parent=parent) != 'true':
-            value = _readint(enumnode, 'value', parent=parent, required=True)
-        else:
-            value = name
 
+        # isdefault values are simply ignored and assumed as reserved
+        if _readtxt(enumnode, 'isDefault', False, parent=parent) == 'true':
+            return None
+        
+        value = _readint(enumnode, 'value', parent=parent, required=True)
         return EnumeratedValue(name, value, descr=descr, kwattrs=enumnode)

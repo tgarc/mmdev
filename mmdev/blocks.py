@@ -1,11 +1,11 @@
 from mmdev import utils
 import logging
 import re
-import os
-from operator import attrgetter
 import textwrap
 import json
 
+
+logger = logging.getLogger(__name__)
 
 _bracketregex = re.compile('[\[\]]')
 _textwrap = textwrap.TextWrapper(width=70)
@@ -179,7 +179,7 @@ class Block(LeafBlock):
 
         for blk in subblocks:
             if _bracketregex.search(blk._mnemonic):
-                logging.warning("%s '%s' in %s '%s' is not a legal attribute "
+                logger.warning("%s '%s' in %s '%s' is not a legal attribute "
                                 "name. Will not be added to attributes."  %
                                 (blk.__class__.__name__, blk._mnemonic,
                                  cls.__name__, mnemonic))
@@ -196,7 +196,7 @@ class Block(LeafBlock):
                 else:
                     setattr(mblk, blk._mnemonic, blk)
             else:
-                logging.warning("%s '%s' would overwrite existing attribute by "
+                logger.warning("%s '%s' would overwrite existing attribute by "
                                 "the same name in %s '%s'. Will not be added "
                                 "to attributes." % (blk.__class__.__name__,
                                                     blk._mnemonic, cls.__name__,
@@ -509,6 +509,7 @@ class DeviceBlock(Block):
     """
     _attrs = 'laneWidth', 'busWidth'
 
+
     def __init__(self, mnemonic, subblocks, laneWidth, busWidth, 
                  bind=True, displayName='', descr='', kwattrs={}):
         super(DeviceBlock, self).__init__(mnemonic, subblocks, 
@@ -517,8 +518,93 @@ class DeviceBlock(Block):
         self._laneWidth = laneWidth
         self._busWidth = busWidth
 
-    def _read(self, address, size):
-        raise NotImplementedError
+        self._map = {}
+        for blk in self.walk():
+            key = blk._mnemonic
+            if key in self._map:
+                if not isinstance(self._map[key], list):
+                    self._map[key] = [self._map[key]]
+                self._map[key].append(blk)
+            else:
+                self._map[key] = blk
 
-    def _write(self, address, value, size):
-        raise NotImplementedError
+    def find(self, key):
+        res = self.findall(key)
+        if len(res):
+            return res[0]
+        else:
+            raise ValueError("%s was not found")
+
+    def findall(self, key):
+        res = self._map.get(key)
+        if res is None:
+            return ()
+        return tuple(res) if isinstance(res, list) else (res,)
+
+    def connect(self, link=None):
+        assert link is not None or self.link is not None, "No link has yet been specified."
+        if link is not None:
+            self.link = link
+        self.link.connect()
+
+    def disconnect(self):
+        self.link.disconnect()
+
+    def reset(self):
+        self.link.disconnect()
+        self.link.connect()
+
+    # defer to a DeviceLink to read/write memory
+    def _write(self, address, value, accessSize=None):
+        if accessSize is None:
+            accessSize = self._busWidth
+        self.link.memWrite(address, value, accessSize)
+    write = _write
+    
+    def _read(self, address, accessSize=None):
+        if accessSize is None:
+            accessSize = self._busWidth
+        return utils.HexValue(self.link.memRead(address, accessSize), accessSize)
+    read = _read
+
+    # def read(self, address, bitlen):
+    #     data = []
+
+    #     # First align the address
+    #     modbits = address % self._laneWidth
+    #     address -= modbits
+    #     bitlen -= modbits
+    #     xferlen = align*bool(modbits)
+    #     data += self.link.memRead(address, xferlen)
+    #     address += xferlen
+
+    #     # Read the rest of the data in the largest aligned transfers possible
+    #     xferwidth = self._busWidth
+    #     while bitlen:
+    #         xferlen = xferwidth * (bitlen // xferwidth)
+    #         data += self.link.memRead(address, xferlen)
+    #         bitlen -= xferlen
+    #         address += xferlen
+    #         xferwidth >>= 1
+
+    #     return data
+
+    # def write(self, address, data, bitlen):
+    #     # First align the address
+    #     modbits = address % self._laneWidth
+    #     address -= modbits
+    #     bitlen -= modbits
+    #     xferlen = align*bool(modbits)
+    #     self.link.memWrite(address, data.pop(), xferlen)
+    #     address += xferlen
+
+    #     # Read the rest of the data in the largest aligned transfers possible
+    #     xferwidth = self._busWidth
+    #     while bitlen:
+    #         xferlen = xferwidth * (bitlen // xferwidth)
+    #         self.link.memWrite(address, data.pop(), xferlen)
+    #         bitlen -= xferlen
+    #         address += xferlen
+    #         xferwidth >>= 1
+
+    #     return data

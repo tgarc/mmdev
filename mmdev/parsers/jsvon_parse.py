@@ -1,8 +1,9 @@
 from mmdev.parsers.deviceparser import DeviceParser, ParseException, RequiredValueError
 from mmdev.device import Device
-from mmdev.components import Peripheral, Port, Register, BitField, EnumeratedValue
-from mmdev.blocks import DeviceBlock
-import json
+from mmdev.components import Peripheral, Port, Register, BitField, EnumeratedValue, DebugPort, AccessPort
+from mmdev.devicelink.daplink import DAPLink
+
+import json, re
 from mmdev import utils
 
 
@@ -37,6 +38,24 @@ def _readint(node, tag, default=None, parent={}, required=False, pop=False):
 
 
 class JSVONParser(DeviceParser):
+
+    @classmethod
+    def from_devfile(cls, devfile, raiseErr=True):
+        cls._raiseErr = raiseErr
+
+        with open(devfile) as fh:
+            devfile = json.load(fh)
+
+        for k, v in devfile.iteritems():
+            cameltype = re.sub(r'(?!^)([A-Z][a-z0-9]+)', r'_\1', k).lower()
+
+            try:
+                parser = getattr(cls, 'parse_' + cameltype)
+            except AttributeError:
+                raise AttributeError("No '%s' parser found" % k)
+
+            # don't support multiple nodes at the top level
+            return parser(v.pop('mnemonic'), v)
 
     @classmethod
     def parse_port(cls, portname, portnode):
@@ -123,21 +142,21 @@ class JSVONParser(DeviceParser):
                       vendor=_readtxt(devnode, 'vendor', ''))
 
     @classmethod
-    def parse_dap(cls, dapname, dapnode):
+    def parse_dap_link(cls, dapname, dapnode):
         ports = []
-
         for portname, portnode in dapnode.get('accessPorts', {}).iteritems():
-            ports.append(cls.parse_port(portname, portnode))
+            ports.append(cls.parse_access_port(portname, portnode))
 
-        for portname, portnode in dapnode.get('debugPorts', {}).iteritems():
-            ports.append(cls.parse_port(portname, portnode))
+        dp = dapnode['debugPort']
+        ports.append(cls.parse_debug_port(dp.pop('mnemonic'), dp))
 
-        return DeviceBlock(dapname,
-                           ports, 
-                           _readint(dapnode, 'laneWidth', required=True), 
-                           _readint(dapnode, 'busWidth', required=True), 
-                           displayName=_readtxt(dapnode, 'displayName', ''), 
-                           descr=_readtxt(dapnode, 'description', ''))
+        return DAPLink(dapname,
+                       ports, 
+                       _readint(dapnode, 'laneWidth', required=True), 
+                       _readint(dapnode, 'busWidth', required=True), 
+                       displayName=_readtxt(dapnode, 'displayName', ''), 
+                       descr=_readtxt(dapnode, 'description', ''))
+    parse_debug_access_port = parse_dap_link
 
     @classmethod
     def parse_port(cls, portname, portnode):
@@ -146,6 +165,35 @@ class JSVONParser(DeviceParser):
             regs.append(cls.parse_register(regname, regnode))
 
         return Port(portname,
+                    regs, 
+                    _readint(portnode, 'port', required=True), 
+                    _readint(portnode, 'size', required=True), 
+                    _readint(portnode, 'laneWidth', required=True), 
+                    _readint(portnode, 'busWidth', required=True), 
+                    displayName=_readtxt(portnode, 'displayName', ''), 
+                    descr=_readtxt(portnode, 'description', ''))
+    @classmethod
+    def parse_debug_port(cls, portname, portnode):
+        regs = []
+        for regname, regnode in portnode.get('registers', {}).iteritems():
+            regs.append(cls.parse_register(regname, regnode))
+
+        return DebugPort(portname,
+                    regs, 
+                    _readint(portnode, 'port', required=True), 
+                    _readint(portnode, 'size', required=True), 
+                    _readint(portnode, 'laneWidth', required=True), 
+                    _readint(portnode, 'busWidth', required=True), 
+                    displayName=_readtxt(portnode, 'displayName', ''), 
+                    descr=_readtxt(portnode, 'description', ''))
+
+    @classmethod
+    def parse_access_port(cls, portname, portnode):
+        regs = []
+        for regname, regnode in portnode.get('registers', {}).iteritems():
+            regs.append(cls.parse_register(regname, regnode))
+
+        return AccessPort(portname,
                     regs, 
                     _readint(portnode, 'port', required=True), 
                     _readint(portnode, 'size', required=True), 
