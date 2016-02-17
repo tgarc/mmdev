@@ -1,5 +1,4 @@
 from mmdev import utils
-from mmdev.blocks import DeviceBlock
 from mmdev.transport import Transport
 from mmdev.devicelink import DeviceLink
 import logging
@@ -17,23 +16,25 @@ CSW_MSTRDBG  =  0x20000000
 CSW_RESERVED =  0x01000000
 
 
-class DAPLink(DeviceBlock, DeviceLink):
+class DAPLink(DeviceLink):
     """
     Models an ADIv5 compliant Serial Wire Debug interface.
     """
-    def __init__(self, *args, **kwargs):
-        DeviceBlock.__init__(self, *args, **kwargs)
-        DeviceLink.__init__(self)
-        
+    def __new__(cls, transport, descriptorfile='data/dap.json', **kwparse):
+        return super(DAPLink, cls).__new__(cls, transport, descriptorfile, **kwparse)
+
+    def __init__(self, transport, descriptorfile='data/dap.json', **kwparse):
+        super(DAPLink, self).__init__(transport, descriptorfile, **kwparse)
+
         for blk in self:
             blk._macrovalue = utils.HexValue(blk._macrovalue, 8)
             blk.root = self
 
-    def connect(self, transport=None):
+    def connect(self):
         """
         Establish a connection to the Debug Access Port.
         """
-        DeviceLink.connect(self, transport)
+        super(DAPLink, self).connect()
 
         # read ID code to confirm synchronization
         logger.info('IDCODE: %s', self.DP.IDCODE.value)

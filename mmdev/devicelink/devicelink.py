@@ -1,4 +1,9 @@
-class DeviceLink(object):
+from mmdev import utils
+from mmdev.transport import Transport
+from mmdev.components import Device
+
+
+class DeviceLink(Device):
     """
     Provides an interface through which user can send/receive data, as well as
     start, end, and otherwise manage sessions. This interface also takes care of
@@ -8,11 +13,16 @@ class DeviceLink(object):
     class DeviceLinkException(Exception):
         pass
 
-    def __init__(self, *args, **kwargs):
-        super(DeviceLink, self).__init__(self)
-        self.transport = None
+    def __new__(cls, transport, descriptorfile, **kwparse):
+        # This is a sneaky way for init'ing the deviceblock but it's much easier
+        # to let from_devfile handle the parsing and initialization
+        return utils.from_devfile(descriptorfile, supcls=cls, **kwparse)
 
-    def connect(self, transport=None):
+    def __init__(self, transport, descriptorfile, **kwparse):
+        assert isinstance(transport, Transport)
+        self.transport = transport
+
+    def connect(self):
         """
         Establish a session with the target.
 
@@ -21,13 +31,6 @@ class DeviceLink(object):
         transport : mmdev.transport.Transport
             Specifies a transport protocol to use.
         """
-        try:
-            assert transport is not None or getattr(self, 'transport', None) is not None
-        except AssertionError:
-            raise self.DeviceLinkException("No transport protocol has yet been specified.")
-
-        if transport is not None:
-            self.transport = transport
         self.transport.connect()
 
     def disconnect(self):

@@ -9,9 +9,8 @@ class MockLink(DeviceLink):
     """
     A mock device link interface
     """
-    def __init__(self):
-        super(MockLink, self).__init__()
-        self.transport = MockTransport()
+    def __init__(self, transport, descriptorfile, **kwparse):
+        super(MockLink, self).__init__(transport, descriptorfile, **kwparse)
         self.values = {}
 
     def memWrite(self, addr, value, accessSize=32):

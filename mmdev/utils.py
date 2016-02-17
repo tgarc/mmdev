@@ -14,6 +14,26 @@ def get_mask_offset(mask):
     return _bruijn32lookup[ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
 
 
+def from_devfile(devfile, file_format=None, raiseErr=True, **kwargs):
+    """
+    Parse a device file using the given file format. If file format is not
+    given, file extension will be used.
+
+    Supported Formats:
+        + 'json' : JSON
+        + 'svd'  : CMSIS-SVD
+    """
+    from mmdev import parsers
+    if file_format is None:
+        file_format = os.path.splitext(devfile)[1][1:]
+    try:
+        parsercls = parsers.PARSERS[file_format]
+    except KeyError:
+        raise KeyError("File extension '%s' not recognized" % file_format)
+
+    return parsercls(devfile, raiseErr=raiseErr, **kwargs)
+
+
 class HexValue(int):
     def __new__(cls, x, bitwidth=0, base=None):
         if base is None:

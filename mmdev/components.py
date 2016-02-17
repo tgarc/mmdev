@@ -2,6 +2,13 @@ from mmdev import blocks
 from mmdev import utils
 
 
+_levels = {'device': 0,
+           'peripheral': 1,
+           'register': 2,
+           'bitfield': 3,
+           'enumeratedvalue': 4}
+
+
 class CPU(blocks.LeafBlock):
     _attrs = 'revision', 'endian', 'mpuPresent', 'fpuPresent'
 
@@ -11,6 +18,86 @@ class CPU(blocks.LeafBlock):
         self._endian = endian
         self._mpuPresent = mpuPresent
         self._fpuPresent = fpuPresent
+
+
+class Device(blocks.Block):
+    """
+    Models a generic hardware block that defines a single memory address space
+    and its data bus.
+
+    A few notes about the usage of this block:
+
+    1) This block does not impose any structure on the device tree;
+       it's even possible that this block has a parent. 
+    2) This block has no idea about the phyical `link` through which it is
+       connected, or the transport by which data it is sent.
+
+    Parameters
+    ----------
+    mnemonic : str
+        Shorthand or abbreviated name of block.
+    subblocks : list-like
+        All the children of this block.
+    laneWidth : int
+        Defines the number of data bits uniquely selected by each address. For
+        example, a value of 8 denotes that the device is byte-addressable.
+    busWidth : int
+        Defines the bit-width of the maximum single data transfer supported by
+        the bus infrastructure. For example, a value of 32 denotes that the
+        device bus can transfer a maximum of 32 bits in a single transfer.
+    bind : bool
+        Tells the constructor whether or not to bind the subblocks as attributes
+        of the Block instance.
+    displayName : str
+        Expanded name or display name of block.
+    descr : str
+        A string describing functionality, usage, and other relevant notes about
+        the block.
+    """
+    _attrs = 'laneWidth', 'busWidth', 'vendor'
+
+
+    def __init__(self, mnemonic, subblocks, laneWidth, busWidth, 
+                 bind=True, displayName='', descr='', vendor='', kwattrs={}):
+        super(Device, self).__init__(mnemonic, subblocks, 
+                                     bind=bind, displayName=displayName,
+                                     descr=descr, kwattrs=kwattrs)
+        self._laneWidth = laneWidth
+        self._busWidth = busWidth
+        self._vendor = vendor
+
+        # purely for readability, set the address width for peripherals and
+        # registers
+        for blk in self.walk(d=2):
+            blk._macrovalue = utils.HexValue(blk._macrovalue, self._busWidth)
+
+        # register all the nodes into a map for searching
+        self._map = {}
+        for blk in self.walk():
+            key = blk._mnemonic
+            if key in self._map:
+                if not isinstance(self._map[key], list):
+                    self._map[key] = [self._map[key]]
+                self._map[key].append(blk)
+            else:
+                self._map[key] = blk
+
+    def set_format(self, blocktype, fmt):
+        for blk in self.walk(d=1, l=_levels[blocktype.lower()]):
+            blk._fmt = fmt
+
+    def find(self, key):
+        res = self.findall(key)
+        if len(res):
+            return res[0]
+        else:
+            raise ValueError("%s was not found")
+
+    def findall(self, key):
+        res = self._map.get(key)
+        if res is None:
+            return ()
+        return tuple(res) if isinstance(res, list) else (res,)
 
 
 class Peripheral(blocks.MemoryMappedBlock):
@@ -30,7 +117,7 @@ class Peripheral(blocks.MemoryMappedBlock):
     size : int
         Specifies the size of the address region being covered by this block in
         units of the root device's minimum addressable block or
-        ``laneWidth``. (see help for ``mmdev.device.Device``). e.g., For a
+        ``laneWidth``. (see help for ``mmdev.components.Device``). e.g., For a
         byte-addressable device, size should be in byte units. The end address
         of an address block results from the sum of address and (size - 1).
     bind : bool

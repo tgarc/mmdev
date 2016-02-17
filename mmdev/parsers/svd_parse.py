@@ -1,7 +1,6 @@
 from xml.etree import ElementTree
 from mmdev.parsers.deviceparser import DeviceParser, ParseException, RequiredValueError
-from mmdev.device import Device
-from mmdev.components import CPU, Peripheral, Register, BitField, EnumeratedValue
+from mmdev.components import CPU, Device, Peripheral, Register, BitField, EnumeratedValue
 import re
 import logging
 
@@ -57,6 +56,7 @@ class SVDNode(dict):
 
 class SVDParser(DeviceParser):
     _raiseErr = True
+    _supcls = None
 
     @classmethod
     def parse_subblocks(cls, subblksnode, parser, *args, **kwargs):
@@ -84,8 +84,9 @@ class SVDParser(DeviceParser):
         return blks
 
     @classmethod
-    def parse_device(cls, devfile, raiseErr=True):
+    def parse_device(cls, devfile, raiseErr=True, supcls=None):
         cls._raiseErr = raiseErr
+        cls._supcls = supcls
         devnode = SVDNode(ElementTree.parse(devfile).getroot())
 
         try:
@@ -103,19 +104,19 @@ class SVDParser(DeviceParser):
                         'resetValue':   _readint(devnode, 'resetValue'),
                         'resetMask' :   _readint(devnode, 'resetMask') }
 
-            cpu_node = devnode.pop('cpu', None)
-            if cpu_node is not None:
-                cpu_node = SVDNode(cpu_node)
-                cpu = CPU(_readtxt(cpu_node, 'name'),
-                          _readtxt(cpu_node, 'revision'),
-                          _readtxt(cpu_node, 'endian'),
-                          _readint(cpu_node, 'mpuPresent'),
-                          _readint(cpu_node, 'fpuPresent'),
-                          # _readint(cpu_node, 'nvicPrioBits'),
-                          # _readint(cpu_node, 'vtorPresent'),
-                          kwattrs=cpu_node)
-            else:
-                cpu = None
+            # cpu_node = devnode.pop('cpu', None)
+            # if cpu_node is not None:
+            #     cpu_node = SVDNode(cpu_node)
+            #     cpu = CPU(_readtxt(cpu_node, 'name'),
+            #               _readtxt(cpu_node, 'revision'),
+            #               _readtxt(cpu_node, 'endian'),
+            #               _readint(cpu_node, 'mpuPresent'),
+            #               _readint(cpu_node, 'fpuPresent'),
+            #               # _readint(cpu_node, 'nvicPrioBits'),
+            #               # _readint(cpu_node, 'vtorPresent'),
+            #               kwattrs=cpu_node)
+            # else:
+            #     cpu = None
         except ParseException as e:
             if cls._raiseErr:
                 raise e
@@ -124,9 +125,17 @@ class SVDParser(DeviceParser):
 
         pphs = cls.parse_subblocks(devnode.pop('peripherals'), cls.parse_peripheral, **regopts)
 
-        return Device(mnem, pphs, addressUnitBits, width, cpu=cpu,
-                      displayName=name, descr=descr, vendor=vendor,
+        args = mnem, pphs, addressUnitBits, width, #cpu=cpu,
+        kwargs = dict(displayName=name, descr=descr, vendor=vendor,
                       kwattrs=devnode)
+
+        # don't ask...
+        if cls._supcls is None:
+            return Device(*args, **kwargs)
+
+        newdev = Device.__new__(cls._supcls, *args, **kwargs)
+        Device.__init__(newdev, *args, **kwargs)
+        return newdev
 
     @classmethod
     def parse_peripheral(cls, pphnode, parent={}, size=None, access=None,

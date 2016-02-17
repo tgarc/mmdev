@@ -1,7 +1,5 @@
 from mmdev.parsers.deviceparser import DeviceParser, ParseException, RequiredValueError
-from mmdev.device import Device
-from mmdev.components import Peripheral, Port, Register, BitField, EnumeratedValue, DebugPort, AccessPort
-from mmdev.devicelink.daplink import DAPLink
+from mmdev.components import Device, Peripheral, Port, Register, BitField, EnumeratedValue, DebugPort, AccessPort
 
 import json, re
 from mmdev import utils
@@ -38,10 +36,13 @@ def _readint(node, tag, default=None, parent={}, required=False, pop=False):
 
 
 class JSVONParser(DeviceParser):
+    _raiseErr = True
+    _supcls = None
 
     @classmethod
-    def from_devfile(cls, devfile, raiseErr=True):
+    def from_devfile(cls, devfile, raiseErr=True, supcls=None):
         cls._raiseErr = raiseErr
+        cls._supcls = supcls
 
         with open(devfile) as fh:
             devfile = json.load(fh)
@@ -133,16 +134,25 @@ class JSVONParser(DeviceParser):
         for pphname, pphnode in devnode.get('peripherals', {}).iteritems():
             pphs.append(cls.parse_peripheral(pphname, pphnode))
 
-        return Device(devname,
-                      pphs, 
-                      _readint(devnode, 'laneWidth', required=True), 
-                      _readint(devnode, 'busWidth', required=True), 
-                      displayName=_readtxt(devnode, 'displayName', ''), 
+        args = (devname,
+                pphs, 
+                _readint(devnode, 'laneWidth', required=True), 
+                _readint(devnode, 'busWidth', required=True))
+
+        kwargs = dict(displayName=_readtxt(devnode, 'displayName', ''), 
                       descr=_readtxt(devnode, 'description', ''), 
                       vendor=_readtxt(devnode, 'vendor', ''))
 
+        # don't ask...
+        if cls._supcls is None:
+            return Device(*args, **kwargs)
+
+        newdev = Device.__new__(cls._supcls, *args, **kwargs)
+        Device.__init__(newdev, *args, **kwargs)
+        return newdev
+
     @classmethod
-    def parse_dap_link(cls, dapname, dapnode):
+    def parse_debug_access_port(cls, dapname, dapnode):
         ports = []
         for portname, portnode in dapnode.get('accessPorts', {}).iteritems():
             ports.append(cls.parse_access_port(portname, portnode))
@@ -150,13 +160,21 @@ class JSVONParser(DeviceParser):
         dp = dapnode['debugPort']
         ports.append(cls.parse_debug_port(dp.pop('mnemonic'), dp))
 
-        return DAPLink(dapname,
-                       ports, 
-                       _readint(dapnode, 'laneWidth', required=True), 
-                       _readint(dapnode, 'busWidth', required=True), 
-                       displayName=_readtxt(dapnode, 'displayName', ''), 
-                       descr=_readtxt(dapnode, 'description', ''))
-    parse_debug_access_port = parse_dap_link
+        args = (dapname,
+                ports, 
+                _readint(dapnode, 'laneWidth', required=True), 
+                _readint(dapnode, 'busWidth', required=True))
+
+        kwargs = dict(displayName=_readtxt(dapnode, 'displayName', ''), 
+                      descr=_readtxt(dapnode, 'description', ''))
+
+        # don't ask...
+        if cls._supcls is None:
+            return Device(*args, **kwargs)
+
+        newdev = Device.__new__(cls._supcls, *args, **kwargs)
+        Device.__init__(newdev, *args, **kwargs)
+        return newdev
 
     @classmethod
     def parse_port(cls, portname, portnode):
