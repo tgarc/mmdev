@@ -87,7 +87,7 @@ class LeafBlock(object):
     
     def __init__(self, mnemonic, displayName='', descr='', kwattrs={}):
         self._mnemonic = mnemonic
-        self._displayName = displayName
+        self._displayName = displayName or mnemonic
         self._description = descr
         self.parent = None # parent is None until attached to another block
         self.root = self
@@ -518,3 +518,13 @@ class DeviceBlock(Block):
         self._laneWidth = laneWidth
         self._busWidth = busWidth
 
+
+# class BlockArray(Block):
+
+#     def __init__(self, mnemonic, subblocks, numblks, **kwargs):
+#         super(BlockArray, self).__init__(mnemonic, subblocks, **kwargs)
+        
+#         self._numblks = numblks
+            
+#     def __getitem__(self, i):
+#         self._mnemonic = mnemonic + '_' + str(i)

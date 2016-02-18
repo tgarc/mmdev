@@ -190,7 +190,7 @@ class SVDParser(DeviceParser):
         resetvalue = _readint(regnode, 'resetValue', resetValue, 
                               parent=parent, required=resetmask != 0)
 
-        dispname   = _readtxt(regnode, 'displayName', name, parent=parent)
+        dispname   = _readtxt(regnode, 'displayName', '', parent=parent)
         bits = cls.parse_subblocks(regnode.pop('fields', parent.get('fields', [])), cls.parse_bitfield, access=access)
 
         dim = _readint(regnode, 'dim', parent=parent)
@@ -210,6 +210,8 @@ class SVDParser(DeviceParser):
             dimidx = map(str, range(int(m.group(1)),int(m.group(2))+1))
 
         regblk = []
+        name = re.sub(r'(\w+)\[(%s)\]', r'\1_\2', name)
+        dispname = re.sub(r'(\w+)\[(%s)\]', r'\1_\2', dispname)
         for i, idx in enumerate(dimidx):
             regblk.append(Register(name % idx,
                                    bits,

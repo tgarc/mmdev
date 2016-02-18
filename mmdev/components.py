@@ -82,7 +82,7 @@ class Device(blocks.DeviceBlock):
         if len(res):
             return res[0]
         else:
-            raise ValueError("%s was not found")
+            raise ValueError("%s was not found" % key)
 
     def findall(self, key):
         res = self._map.get(key)
