@@ -471,3 +471,50 @@ class IOBlock(MemoryMappedBlock):
         return self.value ^ other
     def __ror__(self, other):
         return self.value | other
+
+
+class DeviceBlock(Block):
+    """
+    Models a generic hardware block that defines a single memory address space
+    and its data bus.
+
+    A few notes about the usage of this block:
+
+    1) This block does not impose any structure on the device tree;
+       e.g., this parent need not be the root node.
+    2) This block has no idea about the phyical `link` through which it is
+       connected, or the transport by which data it is sent.
+
+    Parameters
+    ----------
+    mnemonic : str
+        Shorthand or abbreviated name of block.
+    subblocks : list-like
+        All the children of this block.
+    laneWidth : int
+        Defines the number of data bits uniquely selected by each address. For
+        example, a value of 8 denotes that the device is byte-addressable.
+    busWidth : int
+        Defines the bit-width of the maximum single data transfer supported by
+        the bus infrastructure. For example, a value of 32 denotes that the
+        device bus can transfer a maximum of 32 bits in a single transfer.
+    bind : bool
+        Tells the constructor whether or not to bind the subblocks as attributes
+        of the Block instance.
+    displayName : str
+        Expanded name or display name of block.
+    descr : str
+        A string describing functionality, usage, and other relevant notes about
+        the block.
+    """
+    _attrs = 'laneWidth', 'busWidth'
+
+
+    def __init__(self, mnemonic, subblocks, laneWidth, busWidth, 
+                 bind=True, displayName='', descr='', kwattrs={}):
+        super(DeviceBlock, self).__init__(mnemonic, subblocks, 
+                                     bind=bind, displayName=displayName,
+                                     descr=descr, kwattrs=kwattrs)
+        self._laneWidth = laneWidth
+        self._busWidth = busWidth
+

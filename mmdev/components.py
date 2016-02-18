@@ -20,17 +20,10 @@ class CPU(blocks.LeafBlock):
         self._fpuPresent = fpuPresent
 
 
-class Device(blocks.Block):
+class Device(blocks.DeviceBlock):
     """
     Models a generic hardware block that defines a single memory address space
     and its data bus.
-
-    A few notes about the usage of this block:
-
-    1) This block does not impose any structure on the device tree;
-       it's even possible that this block has a parent. 
-    2) This block has no idea about the phyical `link` through which it is
-       connected, or the transport by which data it is sent.
 
     Parameters
     ----------
@@ -54,16 +47,14 @@ class Device(blocks.Block):
         A string describing functionality, usage, and other relevant notes about
         the block.
     """
-    _attrs = 'laneWidth', 'busWidth', 'vendor'
+    _attrs = 'vendor'
 
 
     def __init__(self, mnemonic, subblocks, laneWidth, busWidth, 
                  bind=True, displayName='', descr='', vendor='', kwattrs={}):
-        super(Device, self).__init__(mnemonic, subblocks, 
+        super(Device, self).__init__(mnemonic, subblocks, laneWidth, busWidth,
                                      bind=bind, displayName=displayName,
                                      descr=descr, kwattrs=kwattrs)
-        self._laneWidth = laneWidth
-        self._busWidth = busWidth
         self._vendor = vendor
 
         # purely for readability, set the address width for peripherals and
@@ -102,9 +93,8 @@ class Device(blocks.Block):
 
 class Peripheral(blocks.MemoryMappedBlock):
     """
-    Models a generic hardware block that is mapped into a memory
-    space. Instances of this class serve mostly as an abstraction that
-    encapsulate groups of registers.
+    Models a generic hardware block that is mapped into a memory space. This
+    class serve primarily as container for groups of registers.
 
     Parameters
     ----------

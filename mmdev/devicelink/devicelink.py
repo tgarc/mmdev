@@ -1,9 +1,9 @@
 from mmdev import utils
 from mmdev.transport import Transport
-from mmdev.components import Device
+from mmdev.blocks import DeviceBlock
 
 
-class DeviceLink(Device):
+class DeviceLink(DeviceBlock):
     """
     Provides an interface through which user can send/receive data, as well as
     start, end, and otherwise manage sessions. This interface also takes care of

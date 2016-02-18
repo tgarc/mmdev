@@ -1,5 +1,6 @@
 from mmdev.parsers.deviceparser import DeviceParser, ParseException, RequiredValueError
 from mmdev.components import Device, Peripheral, Port, Register, BitField, EnumeratedValue, DebugPort, AccessPort
+from mmdev.blocks import DeviceBlock
 
 import json, re
 from mmdev import utils
@@ -170,10 +171,10 @@ class JSVONParser(DeviceParser):
 
         # don't ask...
         if cls._supcls is None:
-            return Device(*args, **kwargs)
+            return DeviceBlock(*args, **kwargs)
 
-        newdev = Device.__new__(cls._supcls, *args, **kwargs)
-        Device.__init__(newdev, *args, **kwargs)
+        newdev = DeviceBlock.__new__(cls._supcls, *args, **kwargs)
+        DeviceBlock.__init__(newdev, *args, **kwargs)
         return newdev
 
     @classmethod
