@@ -14,6 +14,5 @@ import cables
 import target
 
 import parsers
-import dumpers
 
 from utils import from_devfile
