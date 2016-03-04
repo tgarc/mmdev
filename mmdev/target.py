@@ -8,10 +8,10 @@ class Target(Device):
     Models an SVD-like device that defines a single memory address space and its
     data bus.
     """
-    def __new__(cls, link, descriptorfile, **kwparse):
+    def __new__(cls, link, descriptor, **kwparse):
         # This is a sneaky way for init'ing the deviceblock but it's much easier
         # to let from_devfile handle the parsing and initialization
-        return utils.from_devfile(descriptorfile, supcls=cls, **kwparse)
+        return utils.from_devfile(descriptor, supcls=cls, **kwparse)
 
     def __init__(self, link, descriptorfile, **kwparse):
         assert isinstance(link, DeviceLink)
@@ -33,13 +33,13 @@ class Target(Device):
     # defer to a DeviceLink to read/write memory
     def _write(self, address, value, accessSize=None):
         if accessSize is None:
-            accessSize = self._busWidth
+            accessSize = self.busWidth
         self.link.memWrite(address, value, accessSize)
     write = _write
     
     def _read(self, address, accessSize=None):
         if accessSize is None:
-            accessSize = self._busWidth
+            accessSize = self.busWidth
         return utils.HexValue(self.link.memRead(address, accessSize), accessSize)
     read = _read
 
@@ -47,7 +47,7 @@ class Target(Device):
     #     data = []
 
     #     # First align the address
-    #     modbits = address % self._laneWidth
+    #     modbits = address % self.laneWidth
     #     address -= modbits
     #     bitlen -= modbits
     #     xferlen = align*bool(modbits)
@@ -55,7 +55,7 @@ class Target(Device):
     #     address += xferlen
 
     #     # Read the rest of the data in the largest aligned transfers possible
-    #     xferwidth = self._busWidth
+    #     xferwidth = self.busWidth
     #     while bitlen:
     #         xferlen = xferwidth * (bitlen // xferwidth)
     #         data += self.link.memRead(address, xferlen)
@@ -67,7 +67,7 @@ class Target(Device):
 
     # def write(self, address, data, bitlen):
     #     # First align the address
-    #     modbits = address % self._laneWidth
+    #     modbits = address % self.laneWidth
     #     address -= modbits
     #     bitlen -= modbits
     #     xferlen = align*bool(modbits)
@@ -75,7 +75,7 @@ class Target(Device):
     #     address += xferlen
 
     #     # Read the rest of the data in the largest aligned transfers possible
-    #     xferwidth = self._busWidth
+    #     xferwidth = self.busWidth
     #     while bitlen:
     #         xferlen = xferwidth * (bitlen // xferwidth)
     #         self.link.memWrite(address, data.pop(), xferlen)
@@ -84,4 +84,3 @@ class Target(Device):
     #         xferwidth >>= 1
 
     #     return data
-

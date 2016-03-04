@@ -61,25 +61,25 @@ class DAPLink(DeviceLink):
         # Do a system and debug power up request
         self.DP.SELECT = 0
         self.DP.CTRLSTAT.pack(CSYSPWRUPREQ=1, CDBGPWRUPREQ=1)
-        mask = self.DP.CTRLSTAT.CSYSPWRUPACK._mask | self.DP.CTRLSTAT.CDBGPWRUPACK._mask
+        mask = self.DP.CTRLSTAT.CSYSPWRUPACK.mask | self.DP.CTRLSTAT.CDBGPWRUPACK.mask
         while (self.DP.CTRLSTAT&mask) != mask: None
 
         # Prod for support of transfers smaller than 32 bits
         self.MEMAP.CSW.SIZE = 0
         if self.MEMAP.CSW.SIZE == 0:
-            self.MEMAP._laneWidth = 8 << 0
+            self.MEMAP.laneWidth = 8 << 0
             return
 
         self.MEMAP.CSW.SIZE = 1
         if self.MEMAP.CSW.SIZE == 1:
-            self.MEMAP._laneWidth = 8 << 1
+            self.MEMAP.laneWidth = 8 << 1
             return
 
-        self.MEMAP._laneWidth = 8 << 2
+        self.MEMAP.laneWidth = 8 << 2
 
     def probe(self):
         baseaddr = self.MEMAP.BASE.BASEADDR.value
-        self.MEMAP.TAR = baseaddr << self.MEMAP.BASE.BASEADDR._address
+        self.MEMAP.TAR = baseaddr << self.MEMAP.BASE.BASEADDR.offset
         try:
             read = self.MEMAP.DRW.value
         except Transport.FaultResponse:

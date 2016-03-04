@@ -1,8 +1,7 @@
+import json, re
 from mmdev.parsers.deviceparser import DeviceParser, ParseException, RequiredValueError
 from mmdev.components import Device, Peripheral, Port, Register, BitField, EnumeratedValue, DebugPort, AccessPort
 from mmdev.blocks import DeviceBlock
-
-import json, re
 from mmdev import utils
 
 
@@ -72,7 +71,7 @@ class JSVONParser(DeviceParser):
                     _readint(portnode, 'laneWidth', required=True), 
                     _readint(portnode, 'busWidth', required=True), 
                     displayName=_readtxt(portnode, 'displayName', ''),
-                    descr=_readtxt(portnode, 'description',''))
+                    description=_readtxt(portnode, 'description',''))
 
     @classmethod
     def parse_peripheral(cls, pphname, pphnode):
@@ -85,7 +84,7 @@ class JSVONParser(DeviceParser):
                           _readint(pphnode, 'address', required=True),
                           _readint(pphnode, 'size', required=True),
                           displayName=_readtxt(pphnode, 'displayName', ''),
-                          descr=_readtxt(pphnode, 'description',''))
+                          description=_readtxt(pphnode, 'description',''))
 
     @classmethod
     def parse_register(cls, regname, regnode):
@@ -99,7 +98,7 @@ class JSVONParser(DeviceParser):
                         _readint(regnode, 'size', required=True),
                         access=_readtxt(regnode, 'access', 'read-write'),
                         displayName=_readtxt(regnode, 'displayName',''),
-                        descr=_readtxt(regnode, 'description',''))
+                        description=_readtxt(regnode, 'description',''))
 
 
     @classmethod
@@ -120,14 +119,13 @@ class JSVONParser(DeviceParser):
                         evals,
                         access=_readtxt(bfnode, 'access', 'read-write'),
                         displayName=_readtxt(bfnode, 'displayName',''),
-                        descr=_readtxt(bfnode, 'description',''))
+                        description=_readtxt(bfnode, 'description',''))
 
     @classmethod
     def parse_enumerated_value(cls, evname, evnode):
         return EnumeratedValue(evname,
                                _readint(evnode, 'value', required=True),
-                               displayName=_readtxt(evnode, 'displayName',''),
-                               descr=_readtxt(evnode, 'description',''))
+                               description=_readtxt(evnode, 'description',''))
 
     @classmethod
     def parse_device(cls, devname, devnode):
@@ -141,7 +139,7 @@ class JSVONParser(DeviceParser):
                 _readint(devnode, 'busWidth', required=True))
 
         kwargs = dict(displayName=_readtxt(devnode, 'displayName', ''), 
-                      descr=_readtxt(devnode, 'description', ''), 
+                      description=_readtxt(devnode, 'description', ''), 
                       vendor=_readtxt(devnode, 'vendor', ''))
 
         # don't ask...
@@ -167,7 +165,7 @@ class JSVONParser(DeviceParser):
                 _readint(dapnode, 'busWidth', required=True))
 
         kwargs = dict(displayName=_readtxt(dapnode, 'displayName', ''), 
-                      descr=_readtxt(dapnode, 'description', ''))
+                      description=_readtxt(dapnode, 'description', ''))
 
         # don't ask...
         if cls._supcls is None:
@@ -190,7 +188,7 @@ class JSVONParser(DeviceParser):
                     _readint(portnode, 'laneWidth', required=True), 
                     _readint(portnode, 'busWidth', required=True), 
                     displayName=_readtxt(portnode, 'displayName', ''), 
-                    descr=_readtxt(portnode, 'description', ''))
+                    description=_readtxt(portnode, 'description', ''))
     @classmethod
     def parse_debug_port(cls, portname, portnode):
         regs = []
@@ -204,7 +202,7 @@ class JSVONParser(DeviceParser):
                     _readint(portnode, 'laneWidth', required=True), 
                     _readint(portnode, 'busWidth', required=True), 
                     displayName=_readtxt(portnode, 'displayName', ''), 
-                    descr=_readtxt(portnode, 'description', ''))
+                    description=_readtxt(portnode, 'description', ''))
 
     @classmethod
     def parse_access_port(cls, portname, portnode):
@@ -219,4 +217,4 @@ class JSVONParser(DeviceParser):
                     _readint(portnode, 'laneWidth', required=True), 
                     _readint(portnode, 'busWidth', required=True), 
                     displayName=_readtxt(portnode, 'displayName', ''), 
-                    descr=_readtxt(portnode, 'description', ''))
+                    description=_readtxt(portnode, 'description', ''))

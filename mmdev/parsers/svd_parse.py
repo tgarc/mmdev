@@ -93,7 +93,7 @@ class SVDParser(DeviceParser):
             name = 'Device'
             mnem = _readtxt(devnode, 'name', required=True)
             # version = _readtxt(devnode, 'version', required=True)
-            descr = _readtxt(devnode, 'description', required=True)
+            description = _readtxt(devnode, 'description', required=True)
             addressUnitBits = _readint(devnode, 'addressUnitBits', required=True)
             width = _readint(devnode, 'width', required=True)
             vendor = _readtxt(devnode, 'vendor', '')
@@ -126,7 +126,7 @@ class SVDParser(DeviceParser):
         pphs = cls.parse_subblocks(devnode.pop('peripherals'), cls.parse_peripheral, **regopts)
 
         args = mnem, pphs, addressUnitBits, width, #cpu=cpu,
-        kwargs = dict(displayName=name, descr=descr, vendor=vendor,
+        kwargs = dict(displayName=name, description=description, vendor=vendor,
                       kwattrs=devnode)
 
         # don't ask...
@@ -142,7 +142,7 @@ class SVDParser(DeviceParser):
                          protection=None, resetValue=None, resetMask=0):
         name = _readtxt(pphnode, 'name', parent=parent, required=True)
         pphaddr = _readint(pphnode, 'baseAddress', parent=parent, required=True)
-        descr = _readtxt(pphnode,'description', parent=parent) 
+        description = _readtxt(pphnode,'description', parent=parent) 
 
         regopts = { 'size': _readint(pphnode, 'size', parent.get('size', size)),
                     'access': _readtxt(pphnode, 'access', parent.get('access', access)),
@@ -168,7 +168,7 @@ class SVDParser(DeviceParser):
                                      regs,
                                      pphaddr + offset,
                                      size,
-                                     descr=descr,
+                                     description=description,
                                      kwattrs=pphnode))
         return pphblk
 
@@ -181,7 +181,7 @@ class SVDParser(DeviceParser):
         # These are required even when inheriting from another register
         name       = _readtxt(regnode, 'name', required=True)
         addr       = _readint(regnode, 'addressOffset', required=True) + baseaddr
-        descr      = _readtxt(regnode, 'description', required=True)
+        description      = _readtxt(regnode, 'description', required=True)
         
         size       = _readint(regnode, 'size', size, required=True)
         access     = _readtxt(regnode, 'access', access, required=True)
@@ -197,7 +197,7 @@ class SVDParser(DeviceParser):
         if dim is None:
             return Register(name, bits, addr, size, resetMask=resetmask,
                             resetValue=resetvalue, access=access,
-                            displayName=dispname, descr=descr, kwattrs=regnode)
+                            displayName=dispname, description=description, kwattrs=regnode)
 
         diminc = _readint(regnode, 'dimIncrement', parent=parent, required=True)
         dimidx = _readtxt(regnode, 'dimIndex', parent=parent)
@@ -221,7 +221,7 @@ class SVDParser(DeviceParser):
                                    resetValue=resetvalue,
                                    access=access,
                                    displayName=dispname % idx if '%s' in dispname else dispname,
-                                   descr=descr,
+                                   description=description,
                                    kwattrs=regnode))
         return regblk
 
@@ -232,7 +232,7 @@ class SVDParser(DeviceParser):
         if name.lower() == 'reserved':
             return None
 
-        descr = _readtxt(bitnode, 'description', '', parent=parent)
+        description = _readtxt(bitnode, 'description', '', parent=parent)
         bit_range=_readtxt(bitnode, 'bitRange', parent=parent)
         bit_offset=_readint(bitnode, 'bitOffset', parent=parent)
         bit_width=_readint(bitnode, 'bitWidth', parent=parent)
@@ -258,16 +258,16 @@ class SVDParser(DeviceParser):
 
         enumvals = cls.parse_subblocks(enumvals, cls.parse_enumerated_value)
 
-        return BitField(name, bit_offset, bit_width, values=enumvals, access=access, descr=descr, kwattrs=bitnode)
+        return BitField(name, bit_offset, bit_width, values=enumvals, access=access, description=description, kwattrs=bitnode)
 
     @classmethod
     def parse_enumerated_value(cls, enumnode, parent={}):
         name =_readtxt(enumnode, 'name', parent=parent, required=True)
-        descr = _readtxt(enumnode, 'description', '', parent=parent)
+        description = _readtxt(enumnode, 'description', '', parent=parent)
 
         # isdefault values are simply ignored and assumed as reserved
         if _readtxt(enumnode, 'isDefault', False, parent=parent) == 'true':
             return None
         
         value = _readint(enumnode, 'value', parent=parent, required=True)
-        return EnumeratedValue(name, value, descr=descr, kwattrs=enumnode)
+        return EnumeratedValue(name, value, description=description, kwattrs=enumnode)

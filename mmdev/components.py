@@ -1,4 +1,4 @@
-from mmdev import blocks
+import blocks
 from mmdev import utils
 
 
@@ -12,12 +12,12 @@ _levels = {'device': 0,
 class CPU(blocks.LeafBlock):
     _attrs = 'revision', 'endian', 'mpuPresent', 'fpuPresent'
 
-    def __init__(self, mnemonic, revision, endian, mpuPresent, fpuPresent, displayName='', descr='', kwattrs={}):
-        super(CPU, self).__init__(mnemonic, displayName=displayName, descr=descr, kwattrs=kwattrs)
-        self._revision = revision
-        self._endian = endian
-        self._mpuPresent = mpuPresent
-        self._fpuPresent = fpuPresent
+    def __init__(self, mnemonic, revision, endian, mpuPresent, fpuPresent, displayName='', description='', kwattrs={}):
+        super(CPU, self).__init__(mnemonic, displayName=displayName, description=description, kwattrs=kwattrs)
+        self.revision = revision
+        self.endian = endian
+        self.mpuPresent = mpuPresent
+        self.fpuPresent = fpuPresent
 
 
 class Device(blocks.DeviceBlock):
@@ -43,29 +43,30 @@ class Device(blocks.DeviceBlock):
         of the Block instance.
     displayName : str
         Expanded name or display name of block.
-    descr : str
+    description : str
         A string describing functionality, usage, and other relevant notes about
         the block.
-    """
+    """ 
     _attrs = 'vendor'
 
 
     def __init__(self, mnemonic, subblocks, laneWidth, busWidth, 
-                 bind=True, displayName='', descr='', vendor='', kwattrs={}):
+                 bind=True, displayName='', description='', vendor='', kwattrs={}):
         super(Device, self).__init__(mnemonic, subblocks, laneWidth, busWidth,
                                      bind=bind, displayName=displayName,
-                                     descr=descr, kwattrs=kwattrs)
-        self._vendor = vendor
+                                     description=description, kwattrs=kwattrs)
+        self.vendor = vendor
 
         # purely for readability, set the address width for peripherals and
         # registers
         for blk in self.walk(d=2):
-            blk._macrovalue = utils.HexValue(blk._macrovalue, self._busWidth)
+            blk._macrovalue = utils.HexValue(blk._macrovalue, self.busWidth)
 
         # register all the nodes into a map for searching
         self._map = {}
         for blk in self.walk():
-            key = blk._mnemonic
+            blk.root = self
+            key = blk.mnemonic
             if key in self._map:
                 if not isinstance(self._map[key], list):
                     self._map[key] = [self._map[key]]
@@ -91,7 +92,7 @@ class Device(blocks.DeviceBlock):
         return tuple(res) if isinstance(res, list) else (res,)
 
 
-class Peripheral(blocks.MemoryMappedBlock):
+class Peripheral(blocks.Block):
     """
     Models a generic hardware block that is mapped into a memory space. This
     class serve primarily as container for groups of registers.
@@ -115,28 +116,36 @@ class Peripheral(blocks.MemoryMappedBlock):
         the Block instance.
     displayName : str
         Expanded name or display name of block.
-    descr : str
+    description : str
         A string describing functionality, usage, and other relevant notes about
         the block.
     """
     _dynamicBinding = True
+    _macrokey = 'address'
+    _attrs = 'address', 'size'
 
     def __init__(self, mnemonic, registers, address, size, bind=True,
-                 displayName='', descr='', kwattrs={}):
+                 displayName='', description='', kwattrs={}):
         super(Peripheral, self).__init__(mnemonic, registers,
-                                         address, size, bind=bind,
-                                         displayName=displayName, descr=descr,
+                                         displayName=displayName,
+                                         description=description,
                                          kwattrs=kwattrs)
 
-        self._size = utils.HexValue(self._size)
-        self._address = utils.HexValue(self._address)
+        self.address = utils.HexValue(address)
+        self.size = utils.HexValue(size)
 
         # purely for readability, set the data width for registers
         for reg in self:
-            reg._address = utils.HexValue(reg._address, int.bit_length(self._size-1))
+            reg.address = utils.HexValue(reg.address, int.bit_length(self.size-1))
+            
+    def __repr__(self):
+        return "<{:s} '{:s}' in {:s} '{:s}' @ {}>".format(self._typename, 
+                                                             self.mnemonic, 
+                                                             self.parent._typename, 
+                                                             self.parent.mnemonic, 
+                                                             self.address)
 
-
-class Port(Peripheral):
+class Port(blocks.DeviceBlock):
     """
     Models a generic hardware block that lives in an address space *and* defines
     it's own independent address space.
@@ -163,67 +172,117 @@ class Port(Peripheral):
         of the Block instance.
     displayName : str
         Expanded name or display name of block.
-    descr : str
+    description : str
         A string describing functionality, usage, and other relevant notes about
         the block.
     """
     _dynamicBinding = True
-    _fmt="{displayName} ({mnemonic}, {port})"
-    _alias = { 'port' : 'address' }
-    _attrs = 'laneWidth', 'busWidth'
+    _fmt = "{displayName} ({mnemonic}, {port})"
+    _attrs = 'port', 'size'
+    _macrokey = 'port'
 
     def __init__(self, mnemonic, registers, port, byte_size, laneWidth, busWidth,
-                 bind=True, displayName='', descr='', kwattrs={}):
-        super(Port, self).__init__(mnemonic, registers, port, byte_size,
-                                   bind=bind, displayName=displayName, descr=descr,
-                                   kwattrs=kwattrs)
-        self._laneWidth = laneWidth
-        self._busWidth = busWidth
+                 bind=True, displayName='', description='', kwattrs={}):
+        super(Port, self).__init__(mnemonic, registers, laneWidth, busWidth,
+                                   bind=bind, displayName=displayName,
+                                   description=description, kwattrs=kwattrs)
+        self.port = utils.HexValue(port)
+        self.size = utils.HexValue(byte_size)
 
         for blk in self.walk():
             blk.root = self
+
+        # purely for readability, set the data width for registers
+        for reg in self:
+            reg.address = utils.HexValue(reg.address, int.bit_length(self.size-1))
+
+
+    def __repr__(self):
+        return "<{:s} '{:s}' in {:s} '{:s}' @ {}>".format(self._typename, 
+                                                             self.mnemonic, 
+                                                             self.parent._typename, 
+                                                             self.parent.mnemonic, 
+                                                             self.port)
 
 
 class AccessPort(Port):
     # IDR = IDR # all access ports require an IDR
 
     def _read(self, address, size):
-        self.root.apselect(self._port, (address&0xF0) >> 4)
-        return self.root.read(1, address&0xF)
+        self.root.apselect(self.port, (address&0xF0) >> 4)
+        return self.root._read(1, address&0xF)
 
     def _write(self, address, value, size):
-        self.root.apselect(self._port, (address&0xF0) >> 4)
-        self.root.write(1, address&0xF, value)
+        self.root.apselect(self.port, (address&0xF0) >> 4)
+        self.root._write(1, address&0xF, value)
 
 
 class DebugPort(Port):
 
     def _read(self, address, size):
-        return self.root.read(0, address)
+        return self.root._read(0, address)
 
     def _write(self, address, value, size):
-        self.root.write(0, address, value)
+        self.root._write(0, address, value)
 
 
 class Register(blocks.IOBlock):
-    _dynamicBinding = True
-    _attrs = 'resetValue', 'resetMask'
+    """
+    Models a generic hardware register.
 
-    def __init__(self, mnemonic, fields, address, size, resetMask=0,
-                 resetValue=None, access='read-write', bind=True, displayName='',
-                 descr='', kwattrs={}):
-        super(Register, self).__init__(mnemonic, fields, address, size,
-                                       access=access, bind=bind,
-                                       displayName=displayName, descr=descr,
-                                       kwattrs=kwattrs)
+    Parameters
+    ----------
+    mnemonic : str
+        Shorthand or abbreviated name of block.
+    fields : list-like
+        All the bitfields of this block.
+    address : int
+        The absolute address of this block.
+    size : int
+        Size of register in bits.
+    access : {'read-only','write-only', 'read-write'}
+        Describes the read/write permissions for this block.
+        'read-only': 
+            read access is permitted. Write operations will be ignored.
+        'write-only': 
+            write access is permitted. Read operations on this block will always return 0.
+        'read-write': 
+            both read and write accesses are permitted.
+    bind : bool
+        Tells the constructor whether or not to bind subblocks as attributes of
+        the Block instance.
+    displayName : str
+        Expanded name or display name of block.
+    description : str
+        A string describing functionality, usage, and other relevant notes about
+        the block.
+    """
+    _dynamicBinding = True
+    _macrokey = 'address'
+    _attrs = 'resetValue', 'resetMask', 'size', 'address'
+    _fmt="{displayName} ({mnemonic}, {address})"
+
+    def __init__(self, mnemonic, fields, address, size, access='read-write',
+                 resetMask=0, resetValue=None, bind=True, displayName='',
+                 description='', kwattrs={}):
+        super(Register, self).__init__(mnemonic, fields, size, access=access,
+                                       bind=bind, displayName=displayName,
+                                       description=description, kwattrs=kwattrs)
         if resetMask == 0:
             resetValue = 0
-        self._resetValue = utils.HexValue(resetValue, self._size)
-        self._resetMask = utils.HexValue(resetMask, self._size)
-        self._address = utils.HexValue(self._address)
+
+        self.resetValue = utils.HexValue(resetValue, self.size)
+        self.resetMask = utils.HexValue(resetMask, self.size)
+        self.address = utils.HexValue(address)
 
         for field in self:
-            field._mask = utils.HexValue(field._mask, self._size)
+            field.mask = utils.HexValue(field.mask, self.size)
+
+    def _read(self):
+        return self.root._read(self.address, self.size)
+
+    def _write(self, value):
+        return self.root._write(self.address, value, self.size)
 
     def status(self):
         v = self.value
@@ -231,8 +290,8 @@ class Register(blocks.IOBlock):
         headerstr = self._fmt.format(**self.attrs)
         substr = ''
         for blk in self:
-            bitval = utils.HexValue((v&blk._mask) >> blk._offset, blk._size)
-            substr += "\n\t%s %s %s" % (blk._mask, blk._mnemonic, bitval)
+            bitval = utils.HexValue((v&blk.mask) >> blk.offset, blk.size)
+            substr += "\n\t%s %s %s" % (blk.mask, blk.mnemonic, bitval)
 
         print headerstr + substr if substr else headerstr
 
@@ -243,70 +302,109 @@ class Register(blocks.IOBlock):
 
         v = self.value
         for f, a in nodes:
-            v = (v & ~f._mask) | ((a << f._address) & f._mask)
+            v = (v & ~f.mask) | ((a << f.address) & f.mask)
         self.value = v
 
     def unpack(self):
         v = self.value
-        return tuple(utils.HexValue((v&f._mask) >> f._offset, f._size) for f in self)
- 
+        return tuple(utils.HexValue((v&f.mask) >> f.offset, f.size) for f in self)
+
+    def __repr__(self):
+        return "<{:s} '{:s}' in {:s} '{:s}' @ {}>".format(self._typename, 
+                                                          self.mnemonic, 
+                                                          self.parent._typename, 
+                                                          self.parent.mnemonic, 
+                                                          self.address)
 
 class BitField(blocks.IOBlock):
+    """
+    Models a generic bit field.
+
+    Parameters
+    ----------
+    mnemonic : str
+        Shorthand or abbreviated name of block.
+    values : list-like
+        A list of the defined EnumeratedValues.
+    offset : int
+        The bit offset of this field.
+    size : int
+        Size of field in bits.
+    access : {'read-only','write-only', 'read-write'}
+        Describes the read/write permissions for this block.
+        'read-only': 
+            read access is permitted. Write operations will be ignored.
+        'write-only': 
+            write access is permitted. Read operations on this block will always return 0.
+        'read-write': 
+            both read and write accesses are permitted.
+    bind : bool
+        Tells the constructor whether or not to bind subblocks as attributes of
+        the Block instance.
+    displayName : str
+        Expanded name or display name of block.
+    description : str
+        A string describing functionality, usage, and other relevant notes about
+        the block.
+    """
+
     _fmt = "{displayName} ({mnemonic}, {access}, {mask})"
-    _macrokey = _attrs = 'mask'
-    _alias = { 'offset' : "address", 'width' : "size" }
+    _macrokey = 'mask'
+    _attrs = 'mask', 'size', 'offset'
 
-    def __new__(cls, mnemonic, offset, width, values=[], **kwargs):
-        return super(BitField, cls).__new__(cls, mnemonic, values, offset, width, bind=False, **kwargs)
+    def __new__(cls, mnemonic, offset, size, values=[], **kwargs):
+        kwargs['bind'] = False
+        return super(BitField, cls).__new__(cls, mnemonic, values, **kwargs)
 
-    def __init__(self, mnemonic, offset, width, values=[], access='read-write', displayName='', descr='', kwattrs={}):
-        super(BitField, self).__init__(mnemonic, values, offset, width,
-                                       access=access, bind=False,
-                                       displayName=displayName, descr=descr,
-                                       kwattrs=kwattrs)
-
-        self._mask = utils.HexValue(((1 << self._size) - 1) << self._offset)
+    def __init__(self, mnemonic, offset, size, values=[], access='read-write',
+                 displayName='', description='', kwattrs={}):
+        super(BitField, self).__init__(mnemonic, values, size, access=access,
+                                       bind=False, displayName=displayName,
+                                       description=description, kwattrs=kwattrs)
+        self.offset = offset
+        self.size = size
+        self.mask = utils.HexValue(((1 << self.size) - 1) << self.offset)
 
         for enumval in self:
-            enumval._value = utils.HexValue(enumval._value, self._width)
+            enumval.value = utils.HexValue(enumval.value, self.size)
 
     def _read(self):
-        # return (self.root.read(self.parent._offset + self._offset, self._size) & self._mask) >> self._offset
-        return (self.parent.value & self._mask) >> self._offset
+        # return (self.root.read(self.parent.offset + self.offset, self.size) & self.mask) >> self.offset
+        return (self.parent.value & self.mask) >> self.offset
 
     # notice that writing a bitfield requires a read of the register first
     def _write(self, value):
-        # v = (self.root.read(self.parent._offset + self._offset, self._size) & self._mask) >> self._offset
-        # self.root.write(self.parent._offset + self._offset, (value << self._offset) & self._mask, self._size)
-        self.parent.value = (self.parent.value & ~self._mask) | ((value << self._offset) & self._mask)
+        # v = (self.root.read(self.parent.offset + self.offset, self.size) & self.mask) >> self.offset
+        # self.root.write(self.parent.offset + self.offset, (value << self.offset) & self.mask, self.size)
+        self.parent.value = (self.parent.value & ~self.mask) | ((value << self.offset) & self.mask)
 
     def __ilshift__(self, other):
         regval = self.parent.value 
-        bitval = (regval & self._mask) << other
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
+        bitval = (regval & self.mask) << other
+        self.parent.value = (regval & ~self.mask) | (bitval & self.mask)
     def __irshift__(self, other):
         regval = self.parent.value 
-        bitval = (regval & self._mask) >> other
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
+        bitval = (regval & self.mask) >> other
+        self.parent.value = (regval & ~self.mask) | (bitval & self.mask)
     def __iand__(self, other):
         regval = self.parent.value 
-        bitval = (regval & self._mask) & (other << self._offset)
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
+        bitval = (regval & self.mask) & (other << self.offset)
+        self.parent.value = (regval & ~self.mask) | (bitval & self.mask)
     def __ixor__(self, other):
         regval = self.parent.value 
-        bitval = (regval & self._mask) ^ (other << self._offset)
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
+        bitval = (regval & self.mask) ^ (other << self.offset)
+        self.parent.value = (regval & ~self.mask) | (bitval & self.mask)
     def __ior__(self, other):
         regval = self.parent.value 
-        bitval = (regval & self._mask) | (other << self._offset)
-        self.parent.value = (regval & ~self._mask) | (bitval & self._mask)
+        bitval = (regval & self.mask) | (other << self.offset)
+        self.parent.value = (regval & ~self.mask) | (bitval & self.mask)
 
     def __repr__(self):
         return "<{:s} '{:s}' in {:s} '{:s}' & {}>".format(self._typename, 
-                                                          self._mnemonic,
+                                                          self.mnemonic,
                                                           self.parent._typename,
-                                                          self.parent._mnemonic, 
-                                                          self._mask)
+                                                          self.parent.mnemonic, 
+                                                          self.mask)
 
 class EnumeratedValue(blocks.LeafBlock):
     _fmt = "{mnemonic} (value={value})"
@@ -315,13 +413,13 @@ class EnumeratedValue(blocks.LeafBlock):
     def __new__(cls, mnemonic, value, **kwargs):
         return super(EnumeratedValue, cls).__new__(cls, mnemonic, **kwargs)
 
-    def __init__(self, mnemonic, value, displayName='', descr='', kwattrs={}):
-        super(EnumeratedValue, self).__init__(mnemonic, displayName=displayName, descr=descr, kwattrs=kwattrs)
-        self._value = utils.HexValue(value)
+    def __init__(self, mnemonic, value, description='', kwattrs={}):
+        super(EnumeratedValue, self).__init__(mnemonic, description=description, kwattrs=kwattrs)
+        self.value = utils.HexValue(value)
 
     def __repr__(self):
         return "<{:s} '{:s}' in {:s} '{:s}'>".format(self._typename,
-                                                     self._mnemonic,
+                                                     self.mnemonic,
                                                      self.parent._typename,
-                                                     self.parent._mnemonic)
+                                                     self.parent.mnemonic)
 
