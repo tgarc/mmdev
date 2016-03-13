@@ -1,8 +1,18 @@
 from xml.etree import ElementTree
 from mmdev.parsers.deviceparser import DeviceParser, ParseException, RequiredValueError
 from mmdev.components import CPU, Device, Peripheral, Register, BitField, EnumeratedValue
+from mmdev.arrays import RegisterArray
+
 import re
 import logging
+from collections import OrderedDict
+
+logger = logging.getLogger(__name__)
+
+array_suffex = r'\[%s\]|_?%s'
+
+get_suffix = lambda name, exp=array_suffex: re.search(exp, name)
+get_basename = lambda name, exp=array_suffex: re.sub(exp, '', name)
 
 
 def _readtxt(node, tag, default=None, parent={}, required=False, pop=True):
@@ -60,28 +70,61 @@ class SVDParser(DeviceParser):
 
     @classmethod
     def parse_subblocks(cls, subblksnode, parser, *args, **kwargs):
-        blks = []
-        blkmap = { blk.findtext('name'): blk for blk in subblksnode }
+        blkmap = OrderedDict()
         for blknode in subblksnode:
-            if 'derivedFrom' in blknode.attrib:
-                parent = SVDNode(blkmap[blknode.attrib['derivedFrom']])
+            # We'll put blocks and block arrays that have the same base name
+            # in the same index
+            name = get_basename(blknode.findtext('name'))
+            if name in blkmap:
+                blkmap[name].append(blknode)
             else:
+                blkmap[name] = [blknode]
+
+        subblocks = []
+        for name, blknodelst in blkmap.iteritems():
+            svdnodes = []
+            parents = []
+
+            # We iterate through the list, inheriting from any parents, and
+            for blknode in blknodelst:
+                # Since a parent may actually be an array block, iterate through
+                # the parent list and find the first one that has the same
+                # suffix (or lack of one)
                 parent = {}
+                if 'derivedFrom' in blknode.attrib:
+                    bsfx = get_suffix(blknode.findtext('name'))
+                    if bsfx: 
+                        bsfx = bsfx.group()
+
+                    pname = get_basename(blknode.attrib['derivedFrom'])
+                    for pblk in blkmap[pname]:
+                        psfx = get_suffix(pblk.findtext('name'))
+                        if psfx: 
+                            psfx = psfx.group()
+                        if psfx == bsfx:
+                            parent = SVDNode(pblk)
+                            break
+                parents.append(parent)
+                svdnodes.append( SVDNode(blknode) )
+
+            if len(svdnodes) == 1 or parser != cls.parse_register:
+                svdnodes = svdnodes.pop()
+                parents = parents.pop()
 
             try:
-                blk = parser(SVDNode(blknode), *args, parent=parent, **kwargs)
+                blk = parser(svdnodes, *args, parent=parents, **kwargs)
             except ParseException as e:
                 if cls._raiseErr:
                     raise e
-                logging.critical(e.message)
+                logger.critical(e.message)
                 continue
 
             if isinstance(blk, list):
-                blks.extend(blk)
+                subblocks.extend(blk)
             elif blk is not None:
-                blks.append(blk)
+                subblocks.append(blk)
 
-        return blks
+        return subblocks
 
     @classmethod
     def parse_device(cls, devfile, raiseErr=True, supcls=None):
@@ -120,7 +163,7 @@ class SVDParser(DeviceParser):
         except ParseException as e:
             if cls._raiseErr:
                 raise e
-            logging.critical(e.message)
+            logger.critical(e.message)
             return None
 
         pphs = cls.parse_subblocks(devnode.pop('peripherals'), cls.parse_peripheral, **regopts)
@@ -142,7 +185,7 @@ class SVDParser(DeviceParser):
                          protection=None, resetValue=None, resetMask=0):
         name = _readtxt(pphnode, 'name', parent=parent, required=True)
         pphaddr = _readint(pphnode, 'baseAddress', parent=parent, required=True)
-        description = _readtxt(pphnode,'description', parent=parent) 
+        description = _readtxt(pphnode,'description', '', parent=parent) 
 
         regopts = { 'size': _readint(pphnode, 'size', parent.get('size', size)),
                     'access': _readtxt(pphnode, 'access', parent.get('access', access)),
@@ -150,7 +193,8 @@ class SVDParser(DeviceParser):
                     'resetValue': _readint(pphnode, 'resetValue', resetValue, parent=parent),
                     'resetMask': _readint(pphnode, 'resetMask', resetMask, parent=parent) }
 
-        regs = cls.parse_subblocks(pphnode.pop('registers', parent.get('registers', [])), cls.parse_register, pphaddr, **regopts)
+        regs = cls.parse_subblocks(pphnode.pop('registers', parent.get('registers', [])), 
+                                   cls.parse_register, pphaddr, **regopts)
 
         # addressBlocks can be either a list or a single instance
         # here we force it into a list
@@ -174,58 +218,132 @@ class SVDParser(DeviceParser):
 
 
     @classmethod
-    def parse_register(cls, regnode, baseaddr, parent={}, size=None,
+    def parse_register(cls, regnode, baseaddr, parent=None, size=None,
                        access=None, protection=None, resetValue=None,
                        resetMask=0):
+        if not isinstance(regnode, list):
+            parent = parent or {}
+            (name, bits, addr, size), kwargs = cls._parse_register(regnode, baseaddr, parent=parent,
+                                                                   size=size, access=access,
+                                                                   protection=protection,
+                                                                   resetValue=resetValue,
+                                                                   resetMask=resetMask)
+            dim = _readint(regnode, 'dim', parent=parent, pop=False)
+            if dim is None:
+                return Register(name, bits, addr, size, **kwargs)
 
-        # These are required even when inheriting from another register
-        name       = _readtxt(regnode, 'name', required=True)
-        addr       = _readint(regnode, 'addressOffset', required=True) + baseaddr
-        description      = _readtxt(regnode, 'description', required=True)
+            kwargs['suffix'] = get_suffix(name).group()
+            kwargs['displayName'] = get_basename(kwargs['displayName'])
+            name = get_basename(name)
+
+            dimInc = _readint(regnode, 'dimIncrement', default=size, parent=parent, required=True)
+            dimIndex = cls._parse_arrays([regnode])
+
+            return RegisterArray(name, bits, addr, size, dimIndex, elementSize=dimInc, **kwargs)
+
+        regnodelst = regnode
+        parentlst = [{}]*len(regnodelst) if parent is None else parent
+        masterCnt = 0
+        for i in range(len(regnodelst)):
+            dim = _readint(regnodelst[i], 'dim', parent=parentlst[i], pop=False)
+
+            # Ah, if one of the elements has no 'dim' element then this must be the
+            # master element.
+            # Otherwise, we just assume this is a collection of register arrays
+            # and use the first reg as a template for the rest
+            if dim is None:
+                masterCnt += 1
+                masterIdx = i
+                hasmaster = True
+
+        if masterCnt > 1:
+            raise ParseException("Non-unique identifier for register %s" % name)
+        elif masterCnt == 0:
+            templatereg, parent = regnodelst[0], parentlst[0]
+            hasmaster = False
+        else:
+            templatereg, parent = regnodelst.pop(masterIdx), parentlst.pop(masterIdx)
+
+        (name, bits, addr, size), kwargs = cls._parse_register(templatereg, baseaddr,
+                                                               parent=parent, size=size,
+                                                               access=access,
+                                                               protection=protection,
+                                                               resetValue=resetValue,
+                                                               resetMask=resetMask)
+
+        if hasmaster:
+            # Grab the first array and use it as the template
+            (tname, tbits, taddr, tsize), tkwargs = cls._parse_register(regnodelst[0], baseaddr,
+                                                                        parent=parentlst[0], size=size,
+                                                                        access=access,
+                                                                        protection=protection,
+                                                                        resetValue=resetValue,
+                                                                        resetMask=resetMask)
+            # Strip the suffix off the names
+            kwargs['suffix']      = get_suffix(tname).group()
+            tkwargs['displayName'] = get_basename(tkwargs['displayName'])
+            tname = get_basename(tname)
+            templatereg = Register(tname, tbits, taddr, tsize, **tkwargs)
+        else:
+            # No template needed, just use the properties of the array itself
+            templatereg = None
+            kwargs['suffix'] = get_suffix(name).group()
+            kwargs['displayName'] = get_basename(kwargs['displayName'])
+            name = get_basename(name)
+
+        # dimIncrement has to be the same across a register array, so just take
+        # it from the first one
+        dimInc = _readint(regnodelst[0], 'dimIncrement', default=size, parent=parentlst[0], required=True)
+
+        # Concatenate the index from all found register arrays
+        dimIndex = cls._parse_arrays(regnodelst)
+
+        return RegisterArray(name, bits, addr, size, dimIndex,
+                             elementTemplate=templatereg, elementSize=dimInc, **kwargs)
+
+    @classmethod
+    def _parse_register(cls, regnode, baseaddr, parent={}, size=None,
+                        access=None, protection=None, resetValue=None,
+                        resetMask=0):
+        kwargs = {\
+                  'description': _readtxt(regnode, 'description', required=True),
+                  'access' : _readtxt(regnode, 'access', access, required=True),
+                  # protection = _readtxt(regnode, 'protection', protection),
+                  'resetMask' : _readint(regnode, 'resetMask', resetMask, parent=parent),
+                  'displayName': _readtxt(regnode, 'displayName', '', parent=parent)
+                  }
+        kwargs['resetValue'] = _readint(regnode, 'resetValue', resetValue, 
+                                        parent=parent, required=kwargs['resetMask'] != 0)
+
+        args = [\
+                # These are required even when inheriting from another register
+                _readtxt(regnode, 'name', required=True),
+                cls.parse_subblocks(regnode.pop('fields', parent.get('fields', [])), cls.parse_bitfield, access=kwargs['access']),
+                _readint(regnode, 'addressOffset', required=True) + baseaddr,
+                _readint(regnode, 'size', size, required=True),
+                ]
+        return args, kwargs
+
+    @classmethod
+    def _parse_arrays(cls, regnodelst):
+        dimIndex = []
+        for reg in regnodelst:
+            dimidx = _readtxt(reg, 'dimIndex')
+            if dimidx is None:
+                dim = _readint(reg, 'dim', required=True)
+                dimdx = range(dim)
+            elif ',' in dimidx:
+                dimidx = dimidx.split(',')
+                try:
+                    dimidx = map(int, dimidx)
+                except ValueError:
+                    pass
+            elif '-' in dimidx:
+                m=re.search('([0-9]+)-([0-9]+)', dimidx)
+                dimidx = range( int(m.group(1)), int(m.group(2))+1 )
+            dimIndex.extend(dimidx)
+        return dimIndex
         
-        size       = _readint(regnode, 'size', size, required=True)
-        access     = _readtxt(regnode, 'access', access, required=True)
-        # protection = _readtxt(regnode, 'protection', protection)
-        resetmask = _readint(regnode, 'resetMask', resetMask, parent=parent)
-        resetvalue = _readint(regnode, 'resetValue', resetValue, 
-                              parent=parent, required=resetmask != 0)
-
-        dispname   = _readtxt(regnode, 'displayName', '', parent=parent)
-        bits = cls.parse_subblocks(regnode.pop('fields', parent.get('fields', [])), cls.parse_bitfield, access=access)
-
-        dim = _readint(regnode, 'dim', parent=parent)
-        if dim is None:
-            return Register(name, bits, addr, size, resetMask=resetmask,
-                            resetValue=resetvalue, access=access,
-                            displayName=dispname, description=description, kwattrs=regnode)
-
-        diminc = _readint(regnode, 'dimIncrement', parent=parent, required=True)
-        dimidx = _readtxt(regnode, 'dimIndex', parent=parent)
-        if dimidx is None:
-            dimdx = map(str, range(dim))
-        elif ',' in dimidx:
-            dimidx = dimidx.split(',')
-        elif '-' in dimidx:
-            m=re.search('([0-9]+)-([0-9]+)', dimidx)
-            dimidx = map(str, range(int(m.group(1)),int(m.group(2))+1))
-
-        regblk = []
-        name = re.sub(r'(\w+)\[(%s)\]', r'\1_\2', name)
-        dispname = re.sub(r'(\w+)\[(%s)\]', r'\1_\2', dispname)
-        for i, idx in enumerate(dimidx):
-            regblk.append(Register(name % idx,
-                                   bits,
-                                   addr + i*diminc,
-                                   size,
-                                   resetMask=resetmask, 
-                                   resetValue=resetvalue,
-                                   access=access,
-                                   displayName=dispname % idx if '%s' in dispname else dispname,
-                                   description=description,
-                                   kwattrs=regnode))
-        return regblk
-
-
     @classmethod
     def parse_bitfield(cls, bitnode, parent={}, access=None):
         name = _readtxt(bitnode, 'name', parent=parent, required=True)

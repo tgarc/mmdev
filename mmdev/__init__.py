@@ -5,6 +5,7 @@ import utils
 
 import blocks
 import components
+import arrays
 
 import datalink
 import transport

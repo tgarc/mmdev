@@ -1,7 +1,6 @@
 import blocks
 from mmdev import utils
 
-
 _levels = {'device': 0,
            'peripheral': 1,
            'register': 2,
@@ -21,7 +20,7 @@ class CPU(blocks.LeafBlock):
 
 
 class Device(blocks.DeviceBlock):
-    """
+    """\
     Models a generic hardware block that defines a single memory address space
     and its data bus.
 
@@ -93,7 +92,7 @@ class Device(blocks.DeviceBlock):
 
 
 class Peripheral(blocks.Block):
-    """
+    """\
     Models a generic hardware block that is mapped into a memory space. This
     class serve primarily as container for groups of registers.
 
@@ -139,14 +138,10 @@ class Peripheral(blocks.Block):
             reg.address = utils.HexValue(reg.address, int.bit_length(self.size-1))
             
     def __repr__(self):
-        return "<{:s} '{:s}' in {:s} '{:s}' @ {}>".format(self._typename, 
-                                                             self.mnemonic, 
-                                                             self.parent._typename, 
-                                                             self.parent.mnemonic, 
-                                                             self.address)
+        return "<{:s} '{:s}' @ {}>".format(self._typename, self.mnemonic, self.address)
 
 class Port(blocks.DeviceBlock):
-    """
+    """\
     Models a generic hardware block that lives in an address space *and* defines
     it's own independent address space.
 
@@ -198,11 +193,8 @@ class Port(blocks.DeviceBlock):
 
 
     def __repr__(self):
-        return "<{:s} '{:s}' in {:s} '{:s}' @ {}>".format(self._typename, 
-                                                             self.mnemonic, 
-                                                             self.parent._typename, 
-                                                             self.parent.mnemonic, 
-                                                             self.port)
+        return "<{:s} '{:s}' @ {}>".format(self._typename, self.mnemonic, self.port)
+                                           
 
 
 class AccessPort(Port):
@@ -227,7 +219,7 @@ class DebugPort(Port):
 
 
 class Register(blocks.IOBlock):
-    """
+    """\
     Models a generic hardware register.
 
     Parameters
@@ -310,14 +302,12 @@ class Register(blocks.IOBlock):
         return tuple(utils.HexValue((v&f.mask) >> f.offset, f.size) for f in self)
 
     def __repr__(self):
-        return "<{:s} '{:s}' in {:s} '{:s}' @ {}>".format(self._typename, 
-                                                          self.mnemonic, 
-                                                          self.parent._typename, 
-                                                          self.parent.mnemonic, 
-                                                          self.address)
+        return "<{:s} '{:s}' @ {}>".format(self._typename, self.mnemonic, self.address)
+                                           
+
 
 class BitField(blocks.IOBlock):
-    """
+    """\
     Models a generic bit field.
 
     Parameters
@@ -400,11 +390,8 @@ class BitField(blocks.IOBlock):
         self.parent.value = (regval & ~self.mask) | (bitval & self.mask)
 
     def __repr__(self):
-        return "<{:s} '{:s}' in {:s} '{:s}' & {}>".format(self._typename, 
-                                                          self.mnemonic,
-                                                          self.parent._typename,
-                                                          self.parent.mnemonic, 
-                                                          self.mask)
+        return "<{:s} '{:s}' & {}>".format(self._typename, self.mnemonic, self.mask)
+                                           
 
 class EnumeratedValue(blocks.LeafBlock):
     _fmt = "{mnemonic} (value={value})"
@@ -416,10 +403,3 @@ class EnumeratedValue(blocks.LeafBlock):
     def __init__(self, mnemonic, value, description='', kwattrs={}):
         super(EnumeratedValue, self).__init__(mnemonic, description=description, kwattrs=kwattrs)
         self.value = utils.HexValue(value)
-
-    def __repr__(self):
-        return "<{:s} '{:s}' in {:s} '{:s}'>".format(self._typename,
-                                                     self.mnemonic,
-                                                     self.parent._typename,
-                                                     self.parent.mnemonic)
-

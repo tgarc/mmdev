@@ -2,6 +2,7 @@ import json, re
 from mmdev.parsers.deviceparser import DeviceParser, ParseException, RequiredValueError
 from mmdev.components import Device, Peripheral, Port, Register, BitField, EnumeratedValue, DebugPort, AccessPort
 from mmdev.blocks import DeviceBlock
+from mmdev.arrays import RegisterArray
 from mmdev import utils
 
 
@@ -75,6 +76,9 @@ class JSVONParser(DeviceParser):
 
     @classmethod
     def parse_peripheral(cls, pphname, pphnode):
+        if 'index' in pphnode:
+            return cls.parse_peripheral_array(pphname, pphnode)
+
         regs = []
         for regname, regnode in pphnode.get('registers', {}).iteritems():
             regs.append(cls.parse_register(regname, regnode))
@@ -88,6 +92,9 @@ class JSVONParser(DeviceParser):
 
     @classmethod
     def parse_register(cls, regname, regnode):
+        if 'index' in regnode:
+            return cls.parse_register_array(regname, regnode)
+
         bits = []
         for bfname, bfnode in regnode.get('bitFields', {}).iteritems():
             bits.append(cls.parse_bitfield(bfname, bfnode))
@@ -218,3 +225,32 @@ class JSVONParser(DeviceParser):
                     _readint(portnode, 'busWidth', required=True), 
                     displayName=_readtxt(portnode, 'displayName', ''), 
                     description=_readtxt(portnode, 'description', ''))
+
+    @classmethod
+    def parse_register_array(cls, regname, regnode):
+        if 'master' in regnode:
+            mnem = regnode['master'].pop('mnemonic')
+            elementTemplate= cls.parse_register(mnem, regnode.pop('master'))
+        else:
+            elementTemplate = None
+
+        bits = []
+        for bfname, bfnode in regnode.get('bitFields', {}).iteritems():
+            bits.append(cls.parse_bitfield(bfname, bfnode))
+
+        try:
+            index = map(int, regnode['index'])
+        except ValueError:
+            index = regnode['index']
+
+        return RegisterArray(regname,
+                             bits,
+                             _readint(regnode, 'address', required=True),
+                             _readint(regnode, 'size', required=True),
+                             index,
+                             elementTemplate=elementTemplate,
+                             elementSize=_readint(regnode, 'elementSize', None),
+                             suffix=_readtxt(regnode, 'suffix', "[%s]"),
+                             access=_readtxt(regnode, 'access', 'read-write'),
+                             displayName=_readtxt(regnode, 'displayName', ''),
+                             description=_readtxt(regnode, 'description', ''))

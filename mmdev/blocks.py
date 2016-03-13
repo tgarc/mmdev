@@ -30,12 +30,13 @@ class MetaBlock(type):
         clsattrs = list(set(clsattrs))
 
         attrs['_attrs'] = clsattrs
-        attrs['_typename'] = name
+        if '_typename' not in attrs:
+            attrs['_typename'] = name
         return super(MetaBlock, cls).__new__(cls, name, bases, attrs)
 
 
 class LeafBlock(object):
-    """
+    """\
     A generic node object that can have ancestors but no descendant nodes.
 
     Parameters
@@ -87,7 +88,9 @@ class LeafBlock(object):
                  for k in self._attrs }
 
     def to_json(self, recursive=False, **kwargs):
-        return json.dumps({self._typename.lower() : self.to_dict(recursive=recursive)}, **kwargs)
+        key = self._typename.replace('Array', '')
+        key = key[0].lower() + key[1:]
+        return json.dumps({key : self.to_dict(recursive=recursive)}, **kwargs)
 
     @property
     def _scrubbed_attrs(self):
@@ -117,7 +120,7 @@ class LeafBlock(object):
 
 
 class Block(LeafBlock):
-    """
+    """\
     A generic container node object in a device tree. Has list and dict like
     functionality for accessing direct children blocks.
 
@@ -169,10 +172,9 @@ class Block(LeafBlock):
                     setattr(mblk, blk.mnemonic, blk)
             else:
                 logger.warning("%s '%s' would overwrite existing attribute by "
-                                "the same name in %s '%s'. Will not be added "
-                                "to attributes." % (blk.__class__.__name__,
-                                                    blk.mnemonic, cls.__name__,
-                                                    mnemonic))
+                               "the same name in %s '%s'. Will not be added "
+                               "to attributes."  % (blk.__class__.__name__,
+                                                    blk.mnemonic, cls.__name__, mnemonic))
 
         if cls._dynamicBinding:
             newcls = type(cls.__name__, (cls,) + cls.__bases__, mblk)
@@ -203,13 +205,14 @@ class Block(LeafBlock):
     def to_dict(self, recursive=False):
         blkdict = self._scrubbed_attrs
         for blk in self:
-            key = blk._typename[0].lower() + blk._typename[1:] + 's'
+            key = blk._typename.replace('Array', '')
+            key = key[0].lower() + key[1:] + 's'
             if key not in blkdict:
                 blkdict[key] = {}
             if recursive:
                 v = blk.to_dict(recursive=recursive)
             else:
-                v = blk.to_dict()
+                v = blk._scrubbed_attrs
             blkdict[key].update({v.pop('mnemonic') : v})
         return blkdict
 
@@ -291,14 +294,6 @@ class Block(LeafBlock):
             descr = textwrap.fill(blk.description, initial_indent=' '*10, subsequent_indent=' '*10, width=80)
             print ' '*4 + '* ' + blk._fmt.format(**blk.attrs) + '\n' + descr
 
-    def __repr__(self):
-        if self.parent is None:
-            return super(Block, self).__repr__()
-        return "<{:s} '{:s}' in {:s} '{:s}'>".format(self._typename,
-                                                     self.mnemonic,
-                                                     self.parent._typename,
-                                                     self.parent.mnemonic)
-
     def __str__(self):
         return self._ls()
 
@@ -307,7 +302,7 @@ READ, WRITE, READWRITE = range(1,4)
 Access = dict(zip(('read-only', 'write-only', 'read-write'), (READ, WRITE, READWRITE)))
     
 class IOBlock(Block):
-    """
+    """\
     Models a generic memory mapped hardware block that can be read and/or
     written to through a root Block's interface. This block just defines the
     address and size of a read/write - the IO implementation details are decided
@@ -383,7 +378,7 @@ class IOBlock(Block):
 
 
 class DeviceBlock(Block):
-    """
+    """\
     Models a generic hardware block that defines a single memory address space
     and its data bus.
 
@@ -427,13 +422,8 @@ class DeviceBlock(Block):
         self.laneWidth = laneWidth
         self.busWidth = busWidth
 
+    def _read(self, *args, **kwargs):
+        raise IOError("No I/O interface has been bound to this block")
 
-# class BlockArray(Block):
-
-#     def __init__(self, mnemonic, subblocks, numblks, **kwargs):
-#         super(BlockArray, self).__init__(mnemonic, subblocks, **kwargs)
-        
-#         self._numblks = numblks
-            
-#     def __getitem__(self, i):
-#         self.mnemonic = mnemonic + '_' + str(i)
+    def _write(self, *args, **kwargs):
+        raise IOError("No I/O interface has been bound to this block")

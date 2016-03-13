@@ -6,11 +6,14 @@ _bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
                     31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
 
 
+#TODO: change to a 64 bit version of the lookup
 def get_mask_offset(mask):
-    cmask = ctypes.c_uint32(mask).value
-    # calculate the bit offset from the mask using a debruijn hash function
+    """\
+    Calculate the offset of the first non-zero bit of a number using a debruijn
+    hash function.
+    """
     # use ctypes to truncate the result to a uint32
-    # TODO: change to a 64 bit version of the lookup
+    cmask = ctypes.c_uint32(mask).value
     return _bruijn32lookup[ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
 
 
@@ -44,23 +47,23 @@ class HexValue(int):
             bitwidth = newint.bit_length()
         div, mod = divmod(bitwidth, 4)
         newint._fmt = ("{:#0%dx}" % (div + bool(mod) + 2)).format
-        newint._width = bitwidth
+        newint.width = bitwidth
         newint._mask = (1 << bitwidth) - 1
         return newint
 
     def __invert__(self):
-        return HexValue(int.__invert__(self), self._width)
+        return HexValue(int.__invert__(self), self.width)
 
     def __lshift__(self, other):
-        return HexValue(int.__lshift__(self, int(other)), self._width)
+        return HexValue(int.__lshift__(self, int(other)), self.width)
     def __rshift__(self, other):
-        return HexValue(int.__rshift__(self, int(other)), self._width)
+        return HexValue(int.__rshift__(self, int(other)), self.width)
     def __and__(self, other):
-        return HexValue(int.__and__(self, int(other)), self._width)
+        return HexValue(int.__and__(self, int(other)), self.width)
     def __xor__(self, other):
-        return HexValue(int.__xor__(self, int(other)), self._width)
+        return HexValue(int.__xor__(self, int(other)), self.width)
     def __or__(self, other):
-        return HexValue(int.__or__(self, int(other)), self._width)
+        return HexValue(int.__or__(self, int(other)), self.width)
 
     def __repr__(self):
         return self._fmt(self if self >= 0 else self&self._mask)
