@@ -84,8 +84,10 @@ class LeafBlock(object):
 
     @property
     def attrs(self):
-        return { k : getattr(self, k) if hasattr(self, k) else getattr(self, '_'+k) 
-                 for k in self._attrs }
+        attrs = { k : getattr(self, k) if hasattr(self, k) else getattr(self, '_'+k) 
+                  for k in self._attrs }
+        attrs.update(self._kwattrs)
+        return attrs
 
     def to_json(self, recursive=False, **kwargs):
         key = self._typename.replace('Array', '')

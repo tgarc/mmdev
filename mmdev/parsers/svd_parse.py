@@ -40,16 +40,25 @@ def _readint(node, tag, default=None, parent={}, required=False, pop=True):
     else:
         x = x.text
 
-    if x.lower().startswith('0x'):
+    x = x.lower()
+    if x.startswith('0x'):
         return int(x, 16)
     if x.startswith('#'):
-        raise ParseException("Binary format not supported")
-
+        return int(x[1:].replace('x','0'), 2)
+    if x == 'false':
+        return False
+    if x == 'true':
+        return True
     return int(x)
+
 
 class SVDNode(dict):
     def __init__(self, node, *args, **kwargs):
         super(SVDNode, self).__init__()
+        if not node:
+            return
+        if isinstance(node, list):
+            node = node.pop(0)
 
         for e in node:
             if e.tag not in self:
@@ -147,19 +156,26 @@ class SVDParser(DeviceParser):
                         'resetValue':   _readint(devnode, 'resetValue'),
                         'resetMask' :   _readint(devnode, 'resetMask') }
 
-            # cpu_node = devnode.pop('cpu', None)
-            # if cpu_node is not None:
-            #     cpu_node = SVDNode(cpu_node)
-            #     cpu = CPU(_readtxt(cpu_node, 'name'),
-            #               _readtxt(cpu_node, 'revision'),
-            #               _readtxt(cpu_node, 'endian'),
-            #               _readint(cpu_node, 'mpuPresent'),
-            #               _readint(cpu_node, 'fpuPresent'),
-            #               # _readint(cpu_node, 'nvicPrioBits'),
-            #               # _readint(cpu_node, 'vtorPresent'),
-            #               kwattrs=cpu_node)
-            # else:
-            #     cpu = None
+            for k, t in {'vendorID': _readtxt, 'version': _readtxt, 'series':
+                         _readtxt, 'licenseText': _readtxt}.items():
+                if k in devnode: devnode[k] = t(devnode, k)
+
+            cpu_node = devnode.pop('cpu', None)
+            if cpu_node is not None:
+                cpu_node = SVDNode(cpu_node)
+                
+                for k, t in {'nvicPrioBits':_readint, 'vtorPresent':_readint,
+                             'vendorSysTickConfig':_readtxt}.items():
+                    if k in cpu_node: cpu_node[k] = t(cpu_node, k)
+
+                cpu = CPU(_readtxt(cpu_node, 'name'),
+                          _readtxt(cpu_node, 'revision'),
+                          _readtxt(cpu_node, 'endian'),
+                          _readint(cpu_node, 'mpuPresent'),
+                          _readint(cpu_node, 'fpuPresent'),
+                          kwattrs=cpu_node)
+            else:
+                cpu = None
         except ParseException as e:
             if cls._raiseErr:
                 raise e
@@ -168,7 +184,7 @@ class SVDParser(DeviceParser):
 
         pphs = cls.parse_subblocks(devnode.pop('peripherals'), cls.parse_peripheral, **regopts)
 
-        args = mnem, pphs, addressUnitBits, width, #cpu=cpu,
+        args = mnem, pphs, addressUnitBits, width, cpu
         kwargs = dict(displayName=name, description=description, vendor=vendor,
                       kwattrs=devnode)
 
@@ -191,10 +207,22 @@ class SVDParser(DeviceParser):
                     'access': _readtxt(pphnode, 'access', parent.get('access', access)),
                     # 'protection': _readtxt(pphnode, 'protection', parent.get('protection', protection)),
                     'resetValue': _readint(pphnode, 'resetValue', resetValue, parent=parent),
-                    'resetMask': _readint(pphnode, 'resetMask', resetMask, parent=parent) }
+                    'resetMask': _readint(pphnode, 'resetMask', resetMask, parent=parent),
+                    'prependToName': _readtxt(pphnode, 'prependToName', '', parent=parent),
+                    'appendToName': _readtxt(pphnode, 'appendToName', '', parent=parent)}
 
         regs = cls.parse_subblocks(pphnode.pop('registers', parent.get('registers', [])), 
                                    cls.parse_register, pphaddr, **regopts)
+
+        if 'groupName' in pphnode or 'groupName' in parent:
+            pphnode['groupName'] = _readtxt(pphnode, 'groupName', parent=parent)
+
+        if 'interrupt' in pphnode:
+            intrpt = SVDNode(pphnode['interrupt'])
+            intrpt['name'] = _readtxt(intrpt, 'name', required=True)
+            intrpt['value'] = _readint(intrpt, 'value', required=True)
+            intrpt['description'] = _readtxt(intrpt, 'description', '')
+            pphnode['interrupt'] = intrpt
 
         # addressBlocks can be either a list or a single instance
         # here we force it into a list
@@ -220,7 +248,7 @@ class SVDParser(DeviceParser):
     @classmethod
     def parse_register(cls, regnode, baseaddr, parent=None, size=None,
                        access=None, protection=None, resetValue=None,
-                       resetMask=0):
+                       resetMask=0, prependToName='', appendToName=''):
         if not isinstance(regnode, list):
             parent = parent or {}
             (name, bits, addr, size), kwargs = cls._parse_register(regnode, baseaddr, parent=parent,
@@ -228,6 +256,7 @@ class SVDParser(DeviceParser):
                                                                    protection=protection,
                                                                    resetValue=resetValue,
                                                                    resetMask=resetMask)
+            name = prependToName + name + appendToName
             dim = _readint(regnode, 'dim', parent=parent, pop=False)
             if dim is None:
                 return Register(name, bits, addr, size, **kwargs)
@@ -282,7 +311,7 @@ class SVDParser(DeviceParser):
             # Strip the suffix off the names
             kwargs['suffix']      = get_suffix(tname).group()
             tkwargs['displayName'] = get_basename(tkwargs['displayName'])
-            tname = get_basename(tname)
+            tname = prependToName + get_basename(tname) + appendToName
             templatereg = Register(tname, tbits, taddr, tsize, **tkwargs)
         else:
             # No template needed, just use the properties of the array itself
@@ -290,6 +319,8 @@ class SVDParser(DeviceParser):
             kwargs['suffix'] = get_suffix(name).group()
             kwargs['displayName'] = get_basename(kwargs['displayName'])
             name = get_basename(name)
+
+        name = prependToName + name + appendToName
 
         # dimIncrement has to be the same across a register array, so just take
         # it from the first one

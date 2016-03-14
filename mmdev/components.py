@@ -12,7 +12,7 @@ class CPU(blocks.LeafBlock):
     _attrs = 'revision', 'endian', 'mpuPresent', 'fpuPresent'
 
     def __init__(self, mnemonic, revision, endian, mpuPresent, fpuPresent, displayName='', description='', kwattrs={}):
-        super(CPU, self).__init__(mnemonic, displayName=displayName, description=description, kwattrs=kwattrs)
+        super(CPU, self).__init__(mnemonic, description=description, kwattrs=kwattrs)
         self.revision = revision
         self.endian = endian
         self.mpuPresent = mpuPresent
@@ -49,12 +49,13 @@ class Device(blocks.DeviceBlock):
     _attrs = 'vendor'
 
 
-    def __init__(self, mnemonic, subblocks, laneWidth, busWidth, 
+    def __init__(self, mnemonic, subblocks, laneWidth, busWidth, cpu=None,
                  bind=True, displayName='', description='', vendor='', kwattrs={}):
         super(Device, self).__init__(mnemonic, subblocks, laneWidth, busWidth,
                                      bind=bind, displayName=displayName,
                                      description=description, kwattrs=kwattrs)
         self.vendor = vendor
+        self.cpu = cpu
 
         # purely for readability, set the address width for peripherals and
         # registers
