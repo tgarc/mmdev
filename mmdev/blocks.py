@@ -49,9 +49,9 @@ class LeafBlock(object):
 
     Attributes
     ----------
-    parent : LeafBlock
+    parent : LeafBlock instance
         Block node that owns this block.
-    root : LeafBlock
+    root : LeafBlock instance
         Block node that is at the root of the device tree.        
     attrs : dict
         A dict of all metadata available for this block.
@@ -194,6 +194,19 @@ class Block(LeafBlock):
             blk.parent = self
 
         self._nodes.sort(key=lambda x: x._macrovalue, reverse=True)
+
+    # wonky feature to allow lower-case aliasing of nodes
+    # def __getattr__(self, attr):
+    #     if attr.islower() and attr.upper() in self.keys():
+    #         return getattr(self, attr.upper())
+    #     else:
+    #         raise AttributeError("'%s' object has no attribute '%s'" % (self._typename, attr))
+
+    # def __setattr__(self, attr, value):
+    #     if attr.islower() and attr.upper() in self.keys():
+    #         setattr(self, attr.upper(), value)
+    #     else:
+    #         self.__dict__[attr] = value
 
     def __len__(self):
         return len(self._nodes)

@@ -356,8 +356,9 @@ class BitField(blocks.IOBlock):
         self.size = size
         self.mask = utils.HexValue(((1 << self.size) - 1) << self.offset)
 
+        intrepr = utils.BinValue if self.size <= 4 else utils.HexValue
         for enumval in self:
-            enumval.value = utils.HexValue(enumval.value, self.size)
+            enumval.value = intrepr(enumval.value, self.size)
 
     def _read(self):
         # return (self.root.read(self.parent.offset + self.offset, self.size) & self.mask) >> self.offset
@@ -403,4 +404,4 @@ class EnumeratedValue(blocks.LeafBlock):
 
     def __init__(self, mnemonic, value, description='', kwattrs={}):
         super(EnumeratedValue, self).__init__(mnemonic, description=description, kwattrs=kwattrs)
-        self.value = utils.HexValue(value)
+        self.value = utils.BinValue(value) if value.bit_length() <= 4 else utils.HexValue(value)

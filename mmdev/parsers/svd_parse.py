@@ -2,6 +2,7 @@ from xml.etree import ElementTree
 from mmdev.parsers.deviceparser import DeviceParser, ParseException, RequiredValueError
 from mmdev.components import CPU, Device, Peripheral, Register, BitField, EnumeratedValue
 from mmdev.arrays import RegisterArray
+from mmdev.utils import HexValue, BinValue
 
 import re
 import logging
@@ -42,14 +43,15 @@ def _readint(node, tag, default=None, parent={}, required=False, pop=True):
 
     x = x.lower()
     if x.startswith('0x'):
-        return int(x, 16)
-    if x.startswith('#'):
-        return int(x[1:].replace('x','0'), 2)
-    if x == 'false':
+        return HexValue(x, bitwidth=len(x[2:])*4, base=16)
+    elif x.startswith('#'):
+        return BinValue(x[1:].replace('x','0'), base=2)
+    elif x == 'false':
         return False
-    if x == 'true':
+    elif x == 'true':
         return True
-    return int(x)
+    else:
+        return int(x)
 
 
 class SVDNode(dict):
@@ -142,7 +144,6 @@ class SVDParser(DeviceParser):
         devnode = SVDNode(ElementTree.parse(devfile).getroot())
 
         try:
-            name = 'Device'
             mnem = _readtxt(devnode, 'name', required=True)
             # version = _readtxt(devnode, 'version', required=True)
             description = _readtxt(devnode, 'description', required=True)
@@ -185,7 +186,7 @@ class SVDParser(DeviceParser):
         pphs = cls.parse_subblocks(devnode.pop('peripherals'), cls.parse_peripheral, **regopts)
 
         args = mnem, pphs, addressUnitBits, width, cpu
-        kwargs = dict(displayName=name, description=description, vendor=vendor,
+        kwargs = dict(description=description, vendor=vendor,
                       kwattrs=devnode)
 
         # don't ask...
