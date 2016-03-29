@@ -37,7 +37,6 @@ def from_devfile(devfile, file_format=None, raiseErr=True, **kwargs):
 
     return parsercls(devfile, raiseErr=raiseErr, **kwargs)
 
-
 class _IntValue(int):
     def __new__(cls, x=0, bitwidth=None, base=None):
         if base is None:

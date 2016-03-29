@@ -104,6 +104,15 @@ class LeafBlock(object):
                 attrs[k] = str(v)
         return attrs
 
+    def __int__(self):
+        try:
+            if isinstance(self._macrovalue, int):
+                return self._macrovalue
+        except AttributeError:
+            pass
+
+        raise TypeError
+
     def to_dict(self, **kwargs):
         return self._scrubbed_attrs
 
@@ -162,17 +171,21 @@ class Block(LeafBlock):
                                  cls.__name__, mnemonic))
                 continue
 
-            try:
-                if cls._dynamicBinding:
+            uniq = False
+            if cls._dynamicBinding:
+                try:
                     mblk[blk.mnemonic]
-                else:
-                    getattr(mblk, blk.mnemonic)
-            except (AttributeError, KeyError):
-                if cls._dynamicBinding:
+                except KeyError:
                     mblk[blk.mnemonic] = blk
-                else:
-                    setattr(mblk, blk.mnemonic, blk)
+                    uniq = True
             else:
+                try:
+                    getattr(mblk, blk.mnemonic)
+                except AttributeError:
+                    setattr(mblk, blk.mnemonic, blk)
+                    uniq = True
+
+            if not uniq:
                 logger.warning("%s '%s' would overwrite existing attribute by "
                                "the same name in %s '%s'. Will not be added "
                                "to attributes."  % (blk.__class__.__name__,
@@ -190,10 +203,11 @@ class Block(LeafBlock):
         self.displayName = displayName or mnemonic
 
         self._nodes = list(subblocks)
-        for blk in self:
+        for blk in self._nodes:
             blk.parent = self
 
         self._nodes.sort(key=lambda x: x._macrovalue, reverse=True)
+        self._nodes = tuple(self._nodes)
 
     # wonky feature to allow lower-case aliasing of nodes
     # def __getattr__(self, attr):
@@ -206,20 +220,18 @@ class Block(LeafBlock):
     #     if attr.islower() and attr.upper() in self.keys():
     #         setattr(self, attr.upper(), value)
     #     else:
-    #         self.__dict__[attr] = value
+    #         super(Block, self).__setattr__(attr, value)
 
-    def __len__(self):
-        return len(self._nodes)
-
-    def __iter__(self):
-        return iter(self._nodes)
+    @property
+    def nodes(self):
+        return self._nodes
 
     def export(self, namespace):
         namespace.update(dict(self.iteritems()))
 
     def to_dict(self, recursive=False):
         blkdict = self._scrubbed_attrs
-        for blk in self:
+        for blk in self._nodes:
             key = blk._typename.replace('Array', '')
             key = key[0].lower() + key[1:] + 's'
             if key not in blkdict:
@@ -308,6 +320,12 @@ class Block(LeafBlock):
         for blk in self._nodes:
             descr = textwrap.fill(blk.description, initial_indent=' '*10, subsequent_indent=' '*10, width=80)
             print ' '*4 + '* ' + blk._fmt.format(**blk.attrs) + '\n' + descr
+
+    def _repr_pretty_(self, p, cycle):
+        if cycle:
+            p.text(self._fmt.format(**self.attrs))
+        else:
+            p.text(self._ls())
 
     def __str__(self):
         return self._ls()

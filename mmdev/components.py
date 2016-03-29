@@ -121,6 +121,7 @@ class Peripheral(blocks.Block):
         the block.
     """
     _dynamicBinding = True
+    _fmt = "{displayName} ({mnemonic}, {address})"
     _macrokey = 'address'
     _attrs = 'address', 'size'
 
@@ -135,7 +136,7 @@ class Peripheral(blocks.Block):
         self.size = utils.HexValue(size)
 
         # purely for readability, set the data width for registers
-        for reg in self:
+        for reg in self.nodes:
             reg.address = utils.HexValue(reg.address, int.bit_length(self.size-1))
             
     def __repr__(self):
@@ -189,7 +190,7 @@ class Port(blocks.DeviceBlock):
             blk.root = self
 
         # purely for readability, set the data width for registers
-        for reg in self:
+        for reg in self.nodes:
             reg.address = utils.HexValue(reg.address, int.bit_length(self.size-1))
 
 
@@ -268,7 +269,7 @@ class Register(blocks.IOBlock):
         self.resetMask = utils.HexValue(resetMask, self.size)
         self.address = utils.HexValue(address)
 
-        for field in self:
+        for field in self.nodes:
             field.mask = utils.HexValue(field.mask, self.size)
 
     def _read(self):
@@ -282,7 +283,7 @@ class Register(blocks.IOBlock):
 
         headerstr = self._fmt.format(**self.attrs)
         substr = ''
-        for blk in self:
+        for blk in self.nodes:
             bitval = utils.HexValue((v&blk.mask) >> blk.offset, blk.size)
             substr += "\n\t%s %s %s" % (blk.mask, blk.mnemonic, bitval)
 
@@ -300,7 +301,7 @@ class Register(blocks.IOBlock):
 
     def unpack(self):
         v = self.value
-        return tuple(utils.HexValue((v&f.mask) >> f.offset, f.size) for f in self)
+        return tuple(utils.HexValue((v&f.mask) >> f.offset, f.size) for f in self.nodes)
 
     def __repr__(self):
         return "<{:s} '{:s}' @ {}>".format(self._typename, self.mnemonic, self.address)
@@ -357,7 +358,7 @@ class BitField(blocks.IOBlock):
         self.mask = utils.HexValue(((1 << self.size) - 1) << self.offset)
 
         intrepr = utils.BinValue if self.size <= 4 else utils.HexValue
-        for enumval in self:
+        for enumval in self.nodes:
             enumval.value = intrepr(enumval.value, self.size)
 
     def _read(self):
