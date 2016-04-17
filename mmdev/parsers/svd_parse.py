@@ -262,14 +262,16 @@ class SVDParser(DeviceParser):
             if dim is None:
                 return Register(name, bits, addr, size, **kwargs)
 
-            kwargs['suffix'] = get_suffix(name).group()
+            suffix = get_suffix(name).group()
             kwargs['displayName'] = get_basename(kwargs['displayName'])
             name = get_basename(name)
 
             dimInc = _readint(regnode, 'dimIncrement', default=size, parent=parent, required=True)
             dimIndex = cls._parse_arrays([regnode])
+            
+            template = Register(name, bits, addr, size, **kwargs)
 
-            return RegisterArray(name, bits, addr, size, dimIndex, elementSize=dimInc, **kwargs)
+            return RegisterArray(dimIndex, template, elementSize=dimInc, suffix=suffix)
 
         regnodelst = regnode
         parentlst = [{}]*len(regnodelst) if parent is None else parent
@@ -284,15 +286,15 @@ class SVDParser(DeviceParser):
             if dim is None:
                 masterCnt += 1
                 masterIdx = i
-                hasmaster = True
 
         if masterCnt > 1:
             raise ParseException("Non-unique identifier for register %s" % name)
-        elif masterCnt == 0:
+        elif masterCnt == 1:
+            templatereg, parent = regnodelst.pop(masterIdx), parentlst.pop(masterIdx)
+            hasmaster = True
+        else: # masterCnt == 0:
             templatereg, parent = regnodelst[0], parentlst[0]
             hasmaster = False
-        else:
-            templatereg, parent = regnodelst.pop(masterIdx), parentlst.pop(masterIdx)
 
         (name, bits, addr, size), kwargs = cls._parse_register(templatereg, baseaddr,
                                                                parent=parent, size=size,
@@ -301,6 +303,7 @@ class SVDParser(DeviceParser):
                                                                resetValue=resetValue,
                                                                resetMask=resetMask)
 
+        regs = []
         if hasmaster:
             # Grab the first array and use it as the template
             (tname, tbits, taddr, tsize), tkwargs = cls._parse_register(regnodelst[0], baseaddr,
@@ -310,16 +313,16 @@ class SVDParser(DeviceParser):
                                                                         resetValue=resetValue,
                                                                         resetMask=resetMask)
             # Strip the suffix off the names
-            kwargs['suffix']      = get_suffix(tname).group()
+            suffix      = get_suffix(tname).group()
             tkwargs['displayName'] = get_basename(tkwargs['displayName'])
             tname = prependToName + get_basename(tname) + appendToName
-            templatereg = Register(tname, tbits, taddr, tsize, **tkwargs)
+            master = Register(tname, tbits, taddr, tsize, **tkwargs)
         else:
             # No template needed, just use the properties of the array itself
-            templatereg = None
-            kwargs['suffix'] = get_suffix(name).group()
+            suffix = get_suffix(name).group()
             kwargs['displayName'] = get_basename(kwargs['displayName'])
             name = get_basename(name)
+            master = None
 
         name = prependToName + name + appendToName
 
@@ -330,8 +333,9 @@ class SVDParser(DeviceParser):
         # Concatenate the index from all found register arrays
         dimIndex = cls._parse_arrays(regnodelst)
 
-        return RegisterArray(name, bits, addr, size, dimIndex,
-                             elementTemplate=templatereg, elementSize=dimInc, **kwargs)
+        template = Register(name, bits, addr, size, **kwargs)
+
+        return RegisterArray(dimIndex, template, elementSize=dimInc, suffix=suffix, master=master)
 
     @classmethod
     def _parse_register(cls, regnode, baseaddr, parent={}, size=None,

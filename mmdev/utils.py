@@ -1,7 +1,7 @@
 import StringIO
 import os
 import ctypes
-
+import textwrap
 
 _bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
                     31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
@@ -16,6 +16,25 @@ def get_mask_offset(mask):
     # use ctypes to truncate the result to a uint32
     cmask = ctypes.c_uint32(mask).value
     return _bruijn32lookup[ctypes.c_uint32((mask & -mask) * 0x077cb531).value >> 27]
+
+
+def tree(blk, depth=-1):
+    print _tree(blk, d=depth)
+
+def _tree(blk, d=-1, pfx=''):
+    treestr = textwrap.fill(blk._fmt.format(**blk.attrs), subsequent_indent=pfx, width=80)
+
+    if d == 0 or not hasattr(blk, 'nodes'):
+        return treestr
+
+    for i, sblk in enumerate(blk.nodes, start=1):
+        treestr += '\n'
+        if i == len(blk.nodes):
+            treestr += pfx + '`-- ' + _tree(sblk, d=d-1, pfx=pfx + '    ')
+        else:
+            treestr += pfx + '|-- ' + _tree(sblk, d=d-1, pfx=pfx + '|   ')
+
+    return treestr
 
 
 def from_devfile(devfile, file_format=None, raiseErr=True, **kwargs):
@@ -37,6 +56,7 @@ def from_devfile(devfile, file_format=None, raiseErr=True, **kwargs):
 
     return parsercls(devfile, raiseErr=raiseErr, **kwargs)
 
+
 class _IntValue(int):
     def __new__(cls, x=0, bitwidth=None, base=None):
         if base is None:
@@ -51,7 +71,7 @@ class _IntValue(int):
         else:
             newint.width = x.bit_length()
 
-        newint.fmt = "{:0%dd}" % newint.width
+        newint.fmt = "%d"
         newint._mask = (1 << newint.width) - 1
 
         return newint

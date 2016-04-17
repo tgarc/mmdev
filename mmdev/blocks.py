@@ -3,9 +3,14 @@ import logging
 import re
 import textwrap
 import json
-
+import collections
+import copy
+import itertools
 
 logger = logging.getLogger(__name__)
+
+
+__allblocks__ = [] # Register of all Block types
 
 
 class MetaBlock(type):
@@ -27,11 +32,14 @@ class MetaBlock(type):
             if isinstance(newattrs, basestring):
                 newattrs = [newattrs,]
             clsattrs.extend(list(newattrs))
-        clsattrs = list(set(clsattrs))
+        clsattrs = tuple(set(clsattrs))
 
         attrs['_attrs'] = clsattrs
         if '_typename' not in attrs:
             attrs['_typename'] = name
+
+        # __allblocks__.append(newcls.__module__ + '.' + name)
+
         return super(MetaBlock, cls).__new__(cls, name, bases, attrs)
 
 
@@ -59,7 +67,7 @@ class LeafBlock(object):
     __metaclass__ = MetaBlock
 
     _fmt = "{mnemonic}"
-    _attrs = 'mnemonic', 'description', 'typename'
+    _attrs = 'mnemonic', 'description'
     
     def __init__(self, mnemonic, description='', kwattrs={}):
         self.mnemonic = mnemonic
@@ -74,9 +82,9 @@ class LeafBlock(object):
     def _macrovalue(self):
         return getattr(self, self._macrokey)
 
-    @_macrovalue.setter
-    def _macrovalue(self, value):
-        setattr(self, self._macrokey, value)
+    # @_macrovalue.setter
+    # def _macrovalue(self, value):
+    #     setattr(self, self._macrokey, value)
 
     @property
     def metadata(self):
@@ -86,21 +94,21 @@ class LeafBlock(object):
     def attrs(self):
         attrs = { k : getattr(self, k) if hasattr(self, k) else getattr(self, '_'+k) 
                   for k in self._attrs }
-        attrs.update(self._kwattrs)
+        # attrs.update(self._kwattrs)
         return attrs
 
-    def to_json(self, recursive=False, **kwargs):
-        key = self._typename.replace('Array', '')
-        key = key[0].lower() + key[1:]
-        return json.dumps({key : self.to_dict(recursive=recursive)}, **kwargs)
+    def to_json(self, recursive=False, key=None, **kwargs):
+        if key is None: 
+            key = self._typename
+            key = key[0].lower() + key[1:]
+        return json.dumps(collections.OrderedDict([(key, self.to_dict(recursive=recursive))]), **kwargs)
 
-    @property
-    def _scrubbed_attrs(self):
+    def _scrubattrs(self):
         attrs = self.attrs
         for k, v in attrs.items():
-            if v == '' or v is None or k == 'typename':
+            if v == '' or v is None:
                 del attrs[k]
-            elif isinstance(v, utils.HexValue):
+            elif isinstance(v, utils._IntValue):
                 attrs[k] = str(v)
         return attrs
 
@@ -114,20 +122,163 @@ class LeafBlock(object):
         raise TypeError
 
     def to_dict(self, **kwargs):
-        return self._scrubbed_attrs
-
-    def _tree(self, d=-1, pfx=''):
-        return textwrap.fill(self._fmt.format(**self.attrs), subsequent_indent=pfx, width=80)
+        return self._scrubattrs()
 
     def summary(self):
         descr = textwrap.fill(self.description, initial_indent=' '*4, subsequent_indent=' '*4, width=80)
         print '<' + self._typename + '>' + ' ' + self._fmt.format(**self.attrs) + '\n' + descr
+
+    def _ls(self):
+        return self._fmt.format(**self.attrs)
+
+    def _repr_pretty_(self, p, cycle):
+        if cycle:
+            p.text(str(self))
+        else:
+            p.text(self._ls())
+
+    def __copy__(self):
+        cls = self.__class__
+        blk = cls.__new__(cls)
+        blk.__dict__.update(self.__dict__)
+        blk.parent = None
+        blk.root = blk
+
+        return blk
 
     def __repr__(self):
         return "<{:s} '{:s}'>".format(self._typename, self.mnemonic)
 
     def __str__(self):
         return self._fmt.format(**self.attrs)
+
+
+class BlockArray(LeafBlock):
+    _attrs = 'index', 'elementSize', 'suffix'
+
+    def __init__(self, index, elementTemplate, elementSize=None, suffix='[%s]', master=None):
+        super(BlockArray, self).__init__(elementTemplate.mnemonic,
+                                         description=elementTemplate.description,
+                                         kwattrs=elementTemplate._kwattrs)
+        for attrk in elementTemplate._attrs:
+            attrv = getattr(elementTemplate, attrk)
+            # self._attrs = self._attrs + (attrk,)
+            setattr(self, attrk, attrv)
+        self._fmt = elementTemplate._fmt
+
+        if isinstance(index, int): # allow for index just being the dimension of the array
+            index = range(index)
+                         
+        self._template = elementTemplate
+        self.master = master
+
+        self._elementSize = utils.HexValue(elementTemplate.size if elementSize is None else elementSize)
+        self._suffix = suffix
+        self._index = collections.OrderedDict.fromkeys(index)
+        self._intindex = dict(zip(index, range(len(self._index))))
+
+    @property
+    def _macrovalue(self):
+        return getattr(self._template, self._template._macrokey)
+
+    def to_json(self, recursive=False, key=None, **kwargs):
+        if key is None:
+            key = self._typename.replace('Array', '')
+            key = key[0].lower() + key[1:]
+        return super(BlockArray, self).to_json(recursive=recursive, key=key, **kwargs)
+
+    def to_dict(self, recursive=False):
+        arraydict = self._template.to_dict(recursive=recursive)
+        if self.master:
+            arraydict['master'] = self.master.to_dict(recursive=recursive)
+        arraydict.update(super(BlockArray, self).to_dict(recursive=recursive))
+
+        return arraydict
+
+    def _ls(self):
+        headerstr = ''
+        if self.master:
+            headerstr = self.master._ls() + '\n'
+        return headerstr + self._template._ls()
+
+    @property
+    def index(self):
+        return self._index.keys()
+
+    def __len__(self):
+        return len(self._index)
+
+    def __iter__(self):
+        return (self._getsingleitem(i) for i in self._index)
+
+    def __sanitizeslice(self, dslice):
+        if isinstance(dslice.start, basestring):
+            yield self._intindex[dslice.start]
+        else:
+            yield dslice.start
+
+        if isinstance(dslice.stop, basestring):
+            yield self._intindex[dslice.stop] + 1
+        else:
+            yield dslice.stop
+
+        yield dslice.step
+
+    def __getitem__(self, i):
+        if not isinstance(i, slice): # if not a slice, assume a single element
+            return self._getsingleitem(i)
+
+        return [self._getsingleitem(i) for i in self.index[slice(*self.__sanitizeslice(i))]]
+
+    def _getsingleitem(self, i):
+        raise NotImplementedError
+
+
+class ValueIndex(object):
+    """\
+    Indexer for that allows for writing/reading values from a block array using
+    indexing and slicing notation.
+    """
+    def __init__(self, owner):
+        self._owner = owner
+
+    def __getitem__(self, i):
+        if not isinstance(i, slice): # if not a slice, assume a single element
+            return self._owner[i]._read()
+        else:
+            return [blk._read() for blk in self._owner[i]]
+
+    def __setitem__(self, i, x):
+        self._owner.__setitem__(i, x)
+
+
+class IOBlockArray(BlockArray):
+
+    def __init__(self, index, elementTemplate, elementSize=None, suffix='[%s]', master=None):
+        super(IOBlockArray, self).__init__(index, elementTemplate,
+                                           elementSize=elementSize,
+                                           suffix=suffix, master=master)
+
+        self.vi = ValueIndex(self)
+
+    def __setitem__(self, i, x):
+        blklst = self[i]
+        
+        blklen = len(blklst) if isinstance(blklst, list) else 1
+        try:
+            xlen = len(x)
+        except TypeError:
+            # allow setting multiple elements with a single number
+            xlen = blklen
+            if blklen > 1: x = [x]*blklen
+        else:
+            if blklen != xlen:
+                raise ValueError("Cannot write sequence of size %d to array of size %d" % (xlen, blklen))
+
+        if blklen == 1: 
+            blklst._write(x)
+        else:
+            for blk, v in itertools.izip(blklst, x): blk._write(v)
 
 
 class Block(LeafBlock):
@@ -155,6 +306,7 @@ class Block(LeafBlock):
 
     def __new__(cls, mnemonic, subblocks, *args, **kwargs):
         bind = kwargs.get('bind', True)
+
         if cls._dynamicBinding and bind:
             mblk = dict(cls.__dict__)
         else:
@@ -199,8 +351,9 @@ class Block(LeafBlock):
 
     def __init__(self, mnemonic, subblocks, bind=True, displayName='', description='', kwattrs={}):
         super(Block, self).__init__(mnemonic, description=description, kwattrs=kwattrs)
-
-        self.displayName = displayName or mnemonic
+        self._bound = bind
+        
+        self.displayName = displayName or self._typename
 
         self._nodes = list(subblocks)
         for blk in self._nodes:
@@ -208,6 +361,11 @@ class Block(LeafBlock):
 
         self._nodes.sort(key=lambda x: x._macrovalue, reverse=True)
         self._nodes = tuple(self._nodes)
+
+    def _scrubattrs(self):
+        attrs = super(Block, self)._scrubattrs()
+        if attrs['displayName'] == self._typename: attrs.pop('displayName')
+        return attrs
 
     # wonky feature to allow lower-case aliasing of nodes
     # def __getattr__(self, attr):
@@ -222,6 +380,25 @@ class Block(LeafBlock):
     #     else:
     #         super(Block, self).__setattr__(attr, value)
 
+    def __copy__(self):
+        cls = self.__class__.__base__ if self._dynamicBinding else self.__class__
+        blk = cls.__new__(cls, self.mnemonic, self._nodes, bind=self._bound)
+        blk.__dict__.update(self.__dict__)
+        blk.parent = None
+        blk.root = blk
+
+        return blk
+
+    # def __deepcopy__(self, memo):
+    #     blk = self.__copy__()
+    #     memo[id(self)] = blk
+    #     print blk
+    #     for k, v in self.__dict__.iteritems():
+    #         print k, v
+    #         setattr(blk, k, copy.deepcopy(v, memo))
+    #     print
+    #     return blk
+
     @property
     def nodes(self):
         return self._nodes
@@ -230,17 +407,21 @@ class Block(LeafBlock):
         namespace.update(dict(self.iteritems()))
 
     def to_dict(self, recursive=False):
-        blkdict = self._scrubbed_attrs
-        for blk in self._nodes:
-            key = blk._typename.replace('Array', '')
+        blkdict = collections.OrderedDict(self._scrubattrs())
+        for blk in reversed(self._nodes):
+            key = blk._typename
             key = key[0].lower() + key[1:] + 's'
-            if key not in blkdict:
-                blkdict[key] = {}
+            if isinstance(blk, BlockArray):
+                key = key.replace('Array', '')
+
             if recursive:
                 v = blk.to_dict(recursive=recursive)
             else:
-                v = blk._scrubbed_attrs
-            blkdict[key].update({v.pop('mnemonic') : v})
+                v = collections.OrderedDict(blk._scrubattrs())
+
+            if key not in blkdict:
+                blkdict[key] = collections.OrderedDict()
+            blkdict[key][v.pop('mnemonic')] = v
         return blkdict
 
     def iterkeys(self):
@@ -272,7 +453,10 @@ class Block(LeafBlock):
             if l == 0:
                 yield blk
 
-            blocks.extend(getattr(blk, '_nodes', []))
+            if isinstance(blk, BlockArray):
+                blocks.extend(list(blk))
+            else:
+                blocks.extend(getattr(blk, '_nodes', []))
             if n == 0:
                 n = len(blocks)
                 if l == 0:
@@ -280,40 +464,24 @@ class Block(LeafBlock):
                 else:
                     l -= 1
             
-    def _tree(self, d=-1, pfx=''):
-        treestr = super(Block, self)._tree(d=d, pfx=pfx)
-
-        if d == 0: 
-            return treestr
-
-        for i, blk in enumerate(self._nodes, start=1):
-            treestr += '\n'
-            if i == len(self._nodes):
-                treestr += pfx + '`-- ' + blk._tree(d=d-1, pfx=pfx + '    ')
-            else:
-                treestr += pfx + '|-- ' + blk._tree(d=d-1, pfx=pfx + '|   ')
-
-        return treestr
-
-    def tree(self, depth=2):
-        pfx = '<' + self._typename + '>' + ' '
-        print pfx + self._tree(d=depth, pfx=' '*len(pfx))
-
     def _ls(self):
         headerstr = self._fmt.format(**self.attrs)
+        rowstr = '\n    {}{}{}  {} {}'
         for blk in self._nodes:
-            headerstr += '\n\t'
-            try:
-                int(blk._macrovalue)
-            except:
-                pass
-            else:
-                headerstr += str(blk._macrovalue) + ' '
-            headerstr += blk.mnemonic
-        return headerstr
+            if isinstance(blk, BlockArray) and blk.master:
+                mblk = blk.master
+                headerstr += rowstr.format('a' if isinstance(mblk, BlockArray) else '-',
+                                           'r' if hasattr(mblk, 'access') and Access[mblk.access] & RDACC else '-',
+                                           'w' if hasattr(mblk, 'access') and Access[mblk.access] & WRACC else '-',
+                                           mblk._macrovalue,
+                                           mblk.mnemonic)
 
-    def ls(self):
-        print self._ls()
+            headerstr += rowstr.format('a' if isinstance(blk, BlockArray) else '-',
+                                       'r' if hasattr(blk, 'access') and Access[blk.access] & RDACC else '-',
+                                       'w' if hasattr(blk, 'access') and Access[blk.access] & WRACC else '-',
+                                       blk._macrovalue,
+                                       blk.mnemonic)
+        return headerstr
 
     def summary(self):
         super(Block, self).summary()
@@ -321,18 +489,10 @@ class Block(LeafBlock):
             descr = textwrap.fill(blk.description, initial_indent=' '*10, subsequent_indent=' '*10, width=80)
             print ' '*4 + '* ' + blk._fmt.format(**blk.attrs) + '\n' + descr
 
-    def _repr_pretty_(self, p, cycle):
-        if cycle:
-            p.text(self._fmt.format(**self.attrs))
-        else:
-            p.text(self._ls())
 
-    def __str__(self):
-        return self._ls()
+RDACC, WRACC, RWACC = range(1,4)
+Access = dict(zip(('read-only', 'write-only', 'read-write'), (RDACC, WRACC, RWACC)))
 
-
-READ, WRITE, READWRITE = range(1,4)
-Access = dict(zip(('read-only', 'write-only', 'read-write'), (READ, WRITE, READWRITE)))
     
 class IOBlock(Block):
     """\
@@ -355,9 +515,9 @@ class IOBlock(Block):
                                       description=description, kwattrs=kwattrs)
         self.size = size
         self.access = access
-        if Access[self.access] & WRITE:
+        if Access[self.access] & WRACC:
             self.__write = self._write
-        if Access[self.access] & READ:
+        if Access[self.access] & RDACC:
             self.__read = self._read
 
     def __read(self):
@@ -455,8 +615,24 @@ class DeviceBlock(Block):
         self.laneWidth = laneWidth
         self.busWidth = busWidth
 
+        for blk in self.walk():
+            if isinstance(blk, DeviceBlock):
+                # We'll assume that if there is a device block on this level that
+                # all other nodes on this level are also device block types
+                break
+            blk.root = self
+
     def _read(self, *args, **kwargs):
         raise IOError("No I/O interface has been bound to this block")
 
     def _write(self, *args, **kwargs):
         raise IOError("No I/O interface has been bound to this block")
+
+    def find(self, key):
+        try:
+            return (blk for blk in self.walk() if key == blk.mnemonic).next()
+        except StopIteration:
+            raise ValueError("%s was not found" % key)
+
+    def findall(self, key):
+        return tuple(blk for blk in self.walk() if key == blk.mnemonic)

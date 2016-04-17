@@ -99,10 +99,14 @@ class JSVONParser(DeviceParser):
         for bfname, bfnode in regnode.get('bitFields', {}).iteritems():
             bits.append(cls.parse_bitfield(bfname, bfnode))
 
+        resetMask = _readint(regnode, 'resetMask', 0)
+
         return Register(regname,
                         bits,
                         _readint(regnode, 'address', required=True),
                         _readint(regnode, 'size', required=True),
+                        resetMask=resetMask,
+                        resetValue=_readint(regnode, 'resetValue', required=resetMask != 0),
                         access=_readtxt(regnode, 'access', 'read-write'),
                         displayName=_readtxt(regnode, 'displayName',''),
                         description=_readtxt(regnode, 'description',''))
@@ -203,13 +207,13 @@ class JSVONParser(DeviceParser):
             regs.append(cls.parse_register(regname, regnode))
 
         return DebugPort(portname,
-                    regs, 
-                    _readint(portnode, 'port', required=True), 
-                    _readint(portnode, 'size', required=True), 
-                    _readint(portnode, 'laneWidth', required=True), 
-                    _readint(portnode, 'busWidth', required=True), 
-                    displayName=_readtxt(portnode, 'displayName', ''), 
-                    description=_readtxt(portnode, 'description', ''))
+                         regs, 
+                         _readint(portnode, 'port', required=True), 
+                         _readint(portnode, 'size', required=True), 
+                         _readint(portnode, 'laneWidth', required=True), 
+                         _readint(portnode, 'busWidth', required=True), 
+                         displayName=_readtxt(portnode, 'displayName', ''), 
+                         description=_readtxt(portnode, 'description', ''))
 
     @classmethod
     def parse_access_port(cls, portname, portnode):
@@ -218,39 +222,47 @@ class JSVONParser(DeviceParser):
             regs.append(cls.parse_register(regname, regnode))
 
         return AccessPort(portname,
-                    regs, 
-                    _readint(portnode, 'port', required=True), 
-                    _readint(portnode, 'size', required=True), 
-                    _readint(portnode, 'laneWidth', required=True), 
-                    _readint(portnode, 'busWidth', required=True), 
-                    displayName=_readtxt(portnode, 'displayName', ''), 
-                    description=_readtxt(portnode, 'description', ''))
+                          regs, 
+                          _readint(portnode, 'port', required=True), 
+                          _readint(portnode, 'size', required=True), 
+                          _readint(portnode, 'laneWidth', required=True), 
+                          _readint(portnode, 'busWidth', required=True), 
+                          displayName=_readtxt(portnode, 'displayName', ''), 
+                          description=_readtxt(portnode, 'description', ''))
 
     @classmethod
     def parse_register_array(cls, regname, regnode):
         if 'master' in regnode:
             mnem = regnode['master'].pop('mnemonic')
-            elementTemplate= cls.parse_register(mnem, regnode.pop('master'))
+            master= cls.parse_register(mnem, regnode.pop('master'))
         else:
-            elementTemplate = None
+            master = None
 
         bits = []
         for bfname, bfnode in regnode.get('bitFields', {}).iteritems():
             bits.append(cls.parse_bitfield(bfname, bfnode))
 
+        index = regnode.pop('index')
         try:
-            index = map(int, regnode['index'])
+            index = map(int, index)
         except ValueError:
-            index = regnode['index']
+            pass
 
-        return RegisterArray(regname,
-                             bits,
-                             _readint(regnode, 'address', required=True),
-                             _readint(regnode, 'size', required=True),
-                             index,
-                             elementTemplate=elementTemplate,
-                             elementSize=_readint(regnode, 'elementSize', None),
+        size = regnode['size']
+        return RegisterArray(index,
+                             cls.parse_register(regname, regnode),
+                             elementSize=_readint(regnode, 'elementSize', size),
                              suffix=_readtxt(regnode, 'suffix', "[%s]"),
-                             access=_readtxt(regnode, 'access', 'read-write'),
-                             displayName=_readtxt(regnode, 'displayName', ''),
-                             description=_readtxt(regnode, 'description', ''))
+                             master=master)
+
+        # return RegisterArray(regname,
+        #                      bits,
+        #                      _readint(regnode, 'address', required=True),
+        #                      _readint(regnode, 'size', required=True),
+        #                      index,
+        #                      elementTemplate=elementTemplate,
+        #                      elementSize=_readint(regnode, 'elementSize', None),
+        #                      suffix=_readtxt(regnode, 'suffix', "[%s]"),
+        #                      access=_readtxt(regnode, 'access', 'read-write'),
+        #                      displayName=_readtxt(regnode, 'displayName', ''),
+        #                      description=_readtxt(regnode, 'description', ''))

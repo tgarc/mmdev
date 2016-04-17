@@ -26,7 +26,7 @@ class DAPLink(DeviceLink):
     def __init__(self, transport, descriptorfile='data/dap.json', **kwparse):
         super(DAPLink, self).__init__(transport, descriptorfile, **kwparse)
 
-        for blk in self:
+        for blk in self.nodes:
             blk._macrovalue = utils.HexValue(blk._macrovalue, 8)
             blk.root = self
 

@@ -1,6 +1,10 @@
 import blocks
 from mmdev import utils
 
+
+__all__ = ["CPU", "Device", "Port", "AccessPort", "DebugPort", "Peripheral",
+           "Register", "BitField", "EnumeratedValue"]
+
 _levels = {'device': 0,
            'peripheral': 1,
            'register': 2,
@@ -59,37 +63,12 @@ class Device(blocks.DeviceBlock):
 
         # purely for readability, set the address width for peripherals and
         # registers
-        for blk in self.walk(d=2):
-            blk._macrovalue = utils.HexValue(blk._macrovalue, self.busWidth)
-
-        # register all the nodes into a map for searching
-        self._map = {}
-        for blk in self.walk():
-            blk.root = self
-            key = blk.mnemonic
-            if key in self._map:
-                if not isinstance(self._map[key], list):
-                    self._map[key] = [self._map[key]]
-                self._map[key].append(blk)
-            else:
-                self._map[key] = blk
+        # for blk in self.walk(d=2):
+        #     blk._macrovalue = utils.HexValue(blk._macrovalue, self.busWidth)
 
     def set_format(self, blocktype, fmt):
         for blk in self.walk(d=1, l=_levels[blocktype.lower()]):
             blk._fmt = fmt
-
-    def find(self, key):
-        res = self.findall(key)
-        if len(res):
-            return res[0]
-        else:
-            raise ValueError("%s was not found" % key)
-
-    def findall(self, key):
-        res = self._map.get(key)
-        if res is None:
-            return ()
-        return tuple(res) if isinstance(res, list) else (res,)
 
 
 class Peripheral(blocks.Block):
@@ -142,6 +121,7 @@ class Peripheral(blocks.Block):
     def __repr__(self):
         return "<{:s} '{:s}' @ {}>".format(self._typename, self.mnemonic, self.address)
 
+
 class Port(blocks.DeviceBlock):
     """\
     Models a generic hardware block that lives in an address space *and* defines
@@ -186,13 +166,9 @@ class Port(blocks.DeviceBlock):
         self.port = utils.HexValue(port)
         self.size = utils.HexValue(byte_size)
 
-        for blk in self.walk():
-            blk.root = self
-
         # purely for readability, set the data width for registers
         for reg in self.nodes:
             reg.address = utils.HexValue(reg.address, int.bit_length(self.size-1))
-
 
     def __repr__(self):
         return "<{:s} '{:s}' @ {}>".format(self._typename, self.mnemonic, self.port)
@@ -253,8 +229,8 @@ class Register(blocks.IOBlock):
     """
     _dynamicBinding = True
     _macrokey = 'address'
-    _attrs = 'resetValue', 'resetMask', 'size', 'address'
-    _fmt="{displayName} ({mnemonic}, {address})"
+    _attrs    = 'resetValue', 'resetMask', 'size', 'address'
+    _fmt      = "{displayName} ({mnemonic}, {address})"
 
     def __init__(self, mnemonic, fields, address, size, access='read-write',
                  resetMask=0, resetValue=None, bind=True, displayName='',
@@ -272,6 +248,12 @@ class Register(blocks.IOBlock):
         for field in self.nodes:
             field.mask = utils.HexValue(field.mask, self.size)
 
+    def _scrubattrs(self):
+        attrs = super(Register, self)._scrubattrs()
+        if self.resetMask == 0:
+            del attrs['resetValue']
+        return attrs
+        
     def _read(self):
         return self.root._read(self.address, self.size)
 
@@ -298,6 +280,44 @@ class Register(blocks.IOBlock):
         for f, a in nodes:
             v = (v & ~f.mask) | ((a << f.address) & f.mask)
         self.value = v
+
+    def rdiff(self, lastdword, newdword, mask=None):
+        return self._diff(lastdword, newdword, 1, mask=mask)
+
+    def wdiff(self, lastdword, newdword, mask=None):
+        return self._diff(lastdword, newdword, 0, mask=mask)
+
+    def _diff(self, lastdword, newdword, rnw, mask=None):
+        if mask is None: 
+            mask = (1 << self.size) - 1
+
+        fields = []
+        ignacc = blocks.WRACC if rnw else blocks.RDACC
+
+        if blocks.Access[self.access] == ignacc:
+            return tuple(fields)
+
+        for fieldname, bitfield in self.iteritems():
+            lfield = bitfield.mask & lastdword
+            nfield = bitfield.mask & newdword
+            
+            diffmask = (lfield ^ nfield) & mask
+
+            if diffmask == 0 or blocks.Access[bitfield.access] == ignacc:
+                continue
+
+            ftype = int
+            if bitfield.size > 1:
+                inttype = utils.HexValue if bitfield.size > 4 else utils.BinValue
+                ftype = lambda x: inttype(x, bitfield.size)
+
+            lval = ftype(lfield >> bitfield.offset)
+            nval = ftype(nfield >> bitfield.offset)
+
+            print "-- %15s: %s -> %s" % (fieldname, lfield, nfield)
+            fields.append((fieldname, nval))
+
+        return tuple(fields)
 
     def unpack(self):
         v = self.value
@@ -344,9 +364,9 @@ class BitField(blocks.IOBlock):
     _macrokey = 'mask'
     _attrs = 'mask', 'size', 'offset'
 
-    def __new__(cls, mnemonic, offset, size, values=[], **kwargs):
+    def __new__(cls, *args, **kwargs):
         kwargs['bind'] = False
-        return super(BitField, cls).__new__(cls, mnemonic, values, **kwargs)
+        return super(BitField, cls).__new__(cls, args[0], kwargs.get('values', []), **kwargs)
 
     def __init__(self, mnemonic, offset, size, values=[], access='read-write',
                  displayName='', description='', kwattrs={}):
@@ -399,9 +419,6 @@ class BitField(blocks.IOBlock):
 class EnumeratedValue(blocks.LeafBlock):
     _fmt = "{mnemonic} (value={value})"
     _macrokey = _attrs = 'value'
-
-    def __new__(cls, mnemonic, value, **kwargs):
-        return super(EnumeratedValue, cls).__new__(cls, mnemonic, **kwargs)
 
     def __init__(self, mnemonic, value, description='', kwattrs={}):
         super(EnumeratedValue, self).__init__(mnemonic, description=description, kwattrs=kwattrs)
