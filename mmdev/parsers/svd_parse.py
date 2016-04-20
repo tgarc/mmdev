@@ -7,12 +7,17 @@ from mmdev.utils import HexValue, BinValue
 import re
 import logging
 from collections import OrderedDict
+from itertools import imap, chain
+import sys
 
 logger = logging.getLogger(__name__)
 
-array_suffex = r'\[%s\]|_?%s'
+array_suffex = re.compile(r'\[%s\]|_?%s')
 
-get_suffix = lambda name, exp=array_suffex: re.search(exp, name)
+def get_suffix(name, exp=array_suffex): 
+    m = exp.search(name)
+    return m.group() if m else m
+
 get_basename = lambda name, exp=array_suffex: re.sub(exp, '', name)
 
 
@@ -23,7 +28,7 @@ def _readtxt(node, tag, default=None, parent={}, required=False, pop=True):
         x = node.get(tag, parent.get(tag, default))
 
     if required and x is None:
-        raise RequiredValueError("Missing required value '%s' in node '%s'" % (tag, node.name))
+        raise RequiredValueError("'%s'" % tag)
 
     return x.text if isinstance(x, ElementTree.Element) else x
 
@@ -35,7 +40,7 @@ def _readint(node, tag, default=None, parent={}, required=False, pop=True):
 
     if x is None:
         if required and default is None:
-            raise RequiredValueError("Missing required value '%s' in node '%s'" % (tag, node.name))
+            raise RequiredValueError("'%s'" % tag)
                 
         return parent.get(tag, default)
     else:
@@ -45,7 +50,7 @@ def _readint(node, tag, default=None, parent={}, required=False, pop=True):
     if x.startswith('0x'):
         return HexValue(x, bitwidth=len(x[2:])*4, base=16)
     elif x.startswith('#'):
-        return BinValue(x[1:].replace('x','0'), base=2)
+        return BinValue(x[1:].replace('x','0'), base=2) # replace DCs with 0's for now
     elif x == 'false':
         return False
     elif x == 'true':
@@ -57,9 +62,9 @@ def _readint(node, tag, default=None, parent={}, required=False, pop=True):
 class SVDNode(dict):
     def __init__(self, node, *args, **kwargs):
         super(SVDNode, self).__init__()
-        if not node:
-            return
         if isinstance(node, list):
+            if node == []:
+                return
             node = node.pop(0)
 
         for e in node:
@@ -71,7 +76,6 @@ class SVDNode(dict):
                 self[e.tag] = [self[e.tag]]
             self[e.tag].append(e)
 
-        self.name = node.findtext('name')
         self.update(node.attrib)
 
 
@@ -81,10 +85,10 @@ class SVDParser(DeviceParser):
 
     @classmethod
     def parse_subblocks(cls, subblksnode, parser, *args, **kwargs):
+        # Collect blocks first, grouping blocks by their base name (i.e. name
+        # without an array suffix)
         blkmap = OrderedDict()
         for blknode in subblksnode:
-            # We'll put blocks and block arrays that have the same base name
-            # in the same index
             name = get_basename(blknode.findtext('name'))
             if name in blkmap:
                 blkmap[name].append(blknode)
@@ -93,43 +97,39 @@ class SVDParser(DeviceParser):
 
         subblocks = []
         for name, blknodelst in blkmap.iteritems():
-            svdnodes = []
+            nodes = []
             parents = []
 
-            # We iterate through the list, inheriting from any parents, and
-            for blknode in blknodelst:
+            # Convert nodes to SVDNodes and grab the appropriate parent nodes
+            for bnode in blknodelst:
                 # Since a parent may actually be an array block, iterate through
                 # the parent list and find the first one that has the same
                 # suffix (or lack of one)
                 parent = {}
-                if 'derivedFrom' in blknode.attrib:
-                    bsfx = get_suffix(blknode.findtext('name'))
-                    if bsfx: 
-                        bsfx = bsfx.group()
-
-                    pname = get_basename(blknode.attrib['derivedFrom'])
-                    for pblk in blkmap[pname]:
-                        psfx = get_suffix(pblk.findtext('name'))
-                        if psfx: 
-                            psfx = psfx.group()
-                        if psfx == bsfx:
+                if 'derivedFrom' in bnode.attrib:
+                    childsfx = get_suffix(bnode.findtext('name'))
+                    for pblk in blkmap[get_basename(bnode.attrib['derivedFrom'])]:
+                        if get_suffix(pblk.findtext('name')) == childsfx:
                             parent = SVDNode(pblk)
                             break
                 parents.append(parent)
-                svdnodes.append( SVDNode(blknode) )
+                nodes.append(SVDNode(bnode))
 
-            if len(svdnodes) == 1 or parser != cls.parse_register:
-                svdnodes = svdnodes.pop()
+            if len(nodes) == 1 or parser != cls.parse_register:
+                nodes = nodes.pop()
                 parents = parents.pop()
-
+                
+            # Parse this collection of sub-blocks
             try:
-                blk = parser(svdnodes, *args, parent=parents, **kwargs)
+                blk = parser(nodes, *args, parent=parents, **kwargs)
             except ParseException as e:
                 if cls._raiseErr:
                     raise e
-                logger.critical(e.message)
+                print >> sys.stderr, "Parse error for node(s) '%s': %s: %s" \
+                                     % (name, e.__class__.__name__, e.message)
                 continue
 
+            # add parsed node(s) to the list
             if isinstance(blk, list):
                 subblocks.extend(blk)
             elif blk is not None:
@@ -232,7 +232,7 @@ class SVDParser(DeviceParser):
             addrblocks = [addrblocks]
 
         pphblk = []
-        for addrblk in map(SVDNode, addrblocks):
+        for addrblk in imap(SVDNode, addrblocks):
             offset = _readint(addrblk, 'offset', required=True)
             size = _readint(addrblk, 'size', required=True)
             # usage = _readint(pphnode, 'usage')
@@ -251,41 +251,23 @@ class SVDParser(DeviceParser):
                        access=None, protection=None, resetValue=None,
                        resetMask=0, prependToName='', appendToName=''):
         if not isinstance(regnode, list):
-            parent = parent or {}
-            (name, bits, addr, size), kwargs = cls._parse_register(regnode, baseaddr, parent=parent,
-                                                                   size=size, access=access,
-                                                                   protection=protection,
-                                                                   resetValue=resetValue,
-                                                                   resetMask=resetMask)
-            name = prependToName + name + appendToName
-            dim = _readint(regnode, 'dim', parent=parent, pop=False)
-            if dim is None:
-                return Register(name, bits, addr, size, **kwargs)
+            regnodelst = [regnode]
+            parentlst = [parent or {}]
+        else:
+            regnodelst = regnode
+            parentlst = [{}]*len(regnodelst) if parent is None else parent
 
-            suffix = get_suffix(name).group()
-            kwargs['displayName'] = get_basename(kwargs['displayName'])
-            name = get_basename(name)
-
-            dimInc = _readint(regnode, 'dimIncrement', default=size, parent=parent, required=True)
-            dimIndex = cls._parse_arrays([regnode])
-            
-            template = Register(name, bits, addr, size, **kwargs)
-
-            return RegisterArray(dimIndex, template, elementSize=dimInc, suffix=suffix)
-
-        regnodelst = regnode
-        parentlst = [{}]*len(regnodelst) if parent is None else parent
         masterCnt = 0
         for i in range(len(regnodelst)):
             dim = _readint(regnodelst[i], 'dim', parent=parentlst[i], pop=False)
 
-            # Ah, if one of the elements has no 'dim' element then this must be the
-            # master element.
-            # Otherwise, we just assume this is a collection of register arrays
-            # and use the first reg as a template for the rest
+            # Ah, if one of the elements has no 'dim' element then this must be
+            # the master element. 
             if dim is None:
                 masterCnt += 1
                 masterIdx = i
+            # Otherwise, we just assume this is a collection of register arrays
+            # and use the first reg array as a template for the rest
 
         if masterCnt > 1:
             raise ParseException("Non-unique identifier for register %s" % name)
@@ -303,23 +285,29 @@ class SVDParser(DeviceParser):
                                                                resetValue=resetValue,
                                                                resetMask=resetMask)
 
+        # This is just a regular register
+        if masterCnt == 1 and len(regnodelst) == 0:
+            return Register(name, bits, addr, size, **kwargs)
+
         regs = []
         if hasmaster:
             # Grab the first array and use it as the template
-            (tname, tbits, taddr, tsize), tkwargs = cls._parse_register(regnodelst[0], baseaddr,
-                                                                        parent=parentlst[0], size=size,
+            templatereg, parent = regnodelst[0], parentlst[0]
+            (tname, tbits, taddr, tsize), tkwargs = cls._parse_register(templatereg, baseaddr,
+                                                                        parent=parent, size=size,
                                                                         access=access,
                                                                         protection=protection,
                                                                         resetValue=resetValue,
                                                                         resetMask=resetMask)
             # Strip the suffix off the names
-            suffix      = get_suffix(tname).group()
+            suffix      = get_suffix(tname)
             tkwargs['displayName'] = get_basename(tkwargs['displayName'])
             tname = prependToName + get_basename(tname) + appendToName
             master = Register(tname, tbits, taddr, tsize, **tkwargs)
         else:
             # No template needed, just use the properties of the array itself
-            suffix = get_suffix(name).group()
+            templatereg, parent = regnodelst[0], parentlst[0]
+            suffix = get_suffix(name)
             kwargs['displayName'] = get_basename(kwargs['displayName'])
             name = get_basename(name)
             master = None
@@ -328,7 +316,7 @@ class SVDParser(DeviceParser):
 
         # dimIncrement has to be the same across a register array, so just take
         # it from the first one
-        dimInc = _readint(regnodelst[0], 'dimIncrement', default=size, parent=parentlst[0], required=True)
+        dimInc = _readint(templatereg, 'dimIncrement', default=size, parent=parent, required=True)
 
         # Concatenate the index from all found register arrays
         dimIndex = cls._parse_arrays(regnodelst)

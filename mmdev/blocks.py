@@ -178,6 +178,12 @@ class BlockArray(LeafBlock):
         self._intindex = dict(zip(index, range(len(self._index))))
 
     @property
+    def attrs(self):
+        attrs = self._template.attrs
+        attrs.update(super(BlockArray, self).attrs)
+        return attrs
+
+    @property
     def _macrovalue(self):
         return getattr(self._template, self._template._macrokey)
 
@@ -501,11 +507,6 @@ class IOBlock(Block):
     address and size of a read/write - the IO implementation details are decided
     by the root block.
     """
-
-    ###
-    # IOBlock is like the DeviceLink, just one level lower. It requires a
-    # _read/_write instead of a memRead/memWrite in order to be more generic
-    ###
     _attrs = 'access', 'size'
 
     def __init__(self, mnemonic, subblocks, size, access='read-write',
