@@ -45,14 +45,9 @@ class JSVONParser(DeviceParser):
         cls._raiseErr = raiseErr
         cls._supcls = supcls
 
-        with open(devfile) as fh:
-            devfile = json.load(fh)
-
-        for k, v in devfile.iteritems():
-            cameltype = re.sub(r'(?!^)([A-Z][a-z0-9]+)', r'_\1', k).lower()
-
+        for k, v in json.load( open(devfile) ).iteritems():
             try:
-                parser = getattr(cls, 'parse_' + cameltype)
+                parser = getattr(cls, 'parse_' + utils.uncamelify(k))
             except AttributeError:
                 raise AttributeError("No '%s' parser found" % k)
 

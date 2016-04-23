@@ -2,10 +2,17 @@ import StringIO
 import os
 import ctypes
 import textwrap
+import re
 
 _bruijn32lookup = [0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
                     31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9]
 
+
+def camelify(word, sep='_'):
+    return ''.join([k.capitalize() for k in word.split(sep)])
+
+def uncamelify(word, sep='_'):
+    return re.sub(r'(?!^)([A-Z][a-z0-9]+)', '%s\1' % sep, word).lower()
 
 #TODO: change to a 64 bit version of the lookup
 def get_mask_offset(mask):

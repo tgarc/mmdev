@@ -328,6 +328,8 @@ class Block(LeafBlock):
                                 (blk.__class__.__name__, blk.mnemonic,
                                  cls.__name__, mnemonic))
                 continue
+            elif blk.mnemonic.lower() == 'reserved':
+                continue # Don't bind 'reserved' blocks
 
             uniq = False
             if cls._dynamicBinding:

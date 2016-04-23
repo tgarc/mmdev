@@ -1,8 +1,6 @@
 from xml.etree import ElementTree
 from mmdev.parsers.deviceparser import DeviceParser, ParseException, RequiredValueError
-from mmdev.components import CPU, Device, Peripheral, Register, BitField, EnumeratedValue
-from mmdev.arrays import RegisterArray
-from mmdev.utils import HexValue, BinValue
+from mmdev import components, arrays, utils
 
 import re
 import logging
@@ -13,6 +11,7 @@ import sys
 logger = logging.getLogger(__name__)
 
 array_suffex = re.compile(r'\[%s\]|_?%s')
+
 
 def get_suffix(name, exp=array_suffex): 
     m = exp.search(name)
@@ -48,9 +47,9 @@ def _readint(node, tag, default=None, parent={}, required=False, pop=True):
 
     x = x.lower()
     if x.startswith('0x'):
-        return HexValue(x, bitwidth=len(x[2:])*4, base=16)
+        return utils.HexValue(x, bitwidth=len(x[2:])*4, base=16)
     elif x.startswith('#'):
-        return BinValue(x[1:].replace('x','0'), base=2) # replace DCs with 0's for now
+        return utils.BinValue(x[1:].replace('x','0'), base=2) # replace DCs with 0's for now
     elif x == 'false':
         return False
     elif x == 'true':
@@ -115,13 +114,39 @@ class SVDParser(DeviceParser):
                 parents.append(parent)
                 nodes.append(SVDNode(bnode))
 
-            if len(nodes) == 1 or parser != cls.parse_register:
-                nodes = nodes.pop()
-                parents = parents.pop()
-                
+            # Split nodes from array nodes
+            i = 0
+            arrlst = []
+            for cnt in range(len(nodes)):
+                if 'dim' in nodes[i] or 'dimIndex' in nodes[i]:
+                    arrlst.append((nodes.pop(i), parents.pop(i)))
+                else:
+                    i += 1
+
+            # Get associated array type from parser name
+            arrname = utils.camelify( (parser.__name__ + '_array')[len('parse_'):] )
+            arrtype = getattr(arrays, arrname, None)
+
             # Parse this collection of sub-blocks
             try:
-                blk = parser(nodes, *args, parent=parents, **kwargs)
+                if len(arrlst) and arrtype is not None:
+                    if len(nodes) > 1:
+                        raise ParseException("Non-unique identifier for node %s" % name)
+                    elif len(nodes) == 1: 
+                        # only one master node is possible for arrayed block types
+                        master = parser(nodes.pop(0), *args, parent=parents.pop(0), **kwargs)
+                    else:
+                        master = None
+                    arrnodes, arrparents = zip(*arrlst)
+                    newblks = [cls.parse_array(arrnodes, arrparents, parser, arrtype, *args, master=master, **kwargs)]
+                else:
+                    newblks = []
+                    for n, p in zip(nodes, parents):
+                        nblk = parser(n, *args, parent=p, **kwargs)
+                        if isinstance(nblk, list):
+                            newblks.extend(nblk)
+                        elif nblk is not None:
+                            newblks.append(nblk)
             except ParseException as e:
                 if cls._raiseErr:
                     raise e
@@ -130,10 +155,7 @@ class SVDParser(DeviceParser):
                 continue
 
             # add parsed node(s) to the list
-            if isinstance(blk, list):
-                subblocks.extend(blk)
-            elif blk is not None:
-                subblocks.append(blk)
+            subblocks.extend(newblks)
 
         return subblocks
 
@@ -169,7 +191,7 @@ class SVDParser(DeviceParser):
                              'vendorSysTickConfig':_readtxt}.items():
                     if k in cpu_node: cpu_node[k] = t(cpu_node, k)
 
-                cpu = CPU(_readtxt(cpu_node, 'name'),
+                cpu = components.CPU(_readtxt(cpu_node, 'name'),
                           _readtxt(cpu_node, 'revision'),
                           _readtxt(cpu_node, 'endian'),
                           _readint(cpu_node, 'mpuPresent'),
@@ -191,10 +213,10 @@ class SVDParser(DeviceParser):
 
         # don't ask...
         if cls._supcls is None:
-            return Device(*args, **kwargs)
+            return components.Device(*args, **kwargs)
 
-        newdev = Device.__new__(cls._supcls, *args, **kwargs)
-        Device.__init__(newdev, *args, **kwargs)
+        newdev = components.Device.__new__(cls._supcls, *args, **kwargs)
+        components.Device.__init__(newdev, *args, **kwargs)
         return newdev
 
     @classmethod
@@ -237,7 +259,7 @@ class SVDParser(DeviceParser):
             size = _readint(addrblk, 'size', required=True)
             # usage = _readint(pphnode, 'usage')
 
-            pphblk.append(Peripheral(name,
+            pphblk.append(components.Peripheral(name,
                                      regs,
                                      pphaddr + offset,
                                      size,
@@ -247,88 +269,51 @@ class SVDParser(DeviceParser):
 
 
     @classmethod
-    def parse_register(cls, regnode, baseaddr, parent=None, size=None,
-                       access=None, protection=None, resetValue=None,
-                       resetMask=0, prependToName='', appendToName=''):
-        if not isinstance(regnode, list):
-            regnodelst = [regnode]
-            parentlst = [parent or {}]
-        else:
-            regnodelst = regnode
-            parentlst = [{}]*len(regnodelst) if parent is None else parent
+    def parse_array(cls, nodelst, parentlst, elemparser, blktype, *args, **kwargs):
+        master = kwargs.pop('master', None)
 
-        masterCnt = 0
-        for i in range(len(regnodelst)):
-            dim = _readint(regnodelst[i], 'dim', parent=parentlst[i], pop=False)
-
-            # Ah, if one of the elements has no 'dim' element then this must be
-            # the master element. 
-            if dim is None:
-                masterCnt += 1
-                masterIdx = i
-            # Otherwise, we just assume this is a collection of register arrays
-            # and use the first reg array as a template for the rest
-
-        if masterCnt > 1:
-            raise ParseException("Non-unique identifier for register %s" % name)
-        elif masterCnt == 1:
-            templatereg, parent = regnodelst.pop(masterIdx), parentlst.pop(masterIdx)
-            hasmaster = True
-        else: # masterCnt == 0:
-            templatereg, parent = regnodelst[0], parentlst[0]
-            hasmaster = False
-
-        (name, bits, addr, size), kwargs = cls._parse_register(templatereg, baseaddr,
-                                                               parent=parent, size=size,
-                                                               access=access,
-                                                               protection=protection,
-                                                               resetValue=resetValue,
-                                                               resetMask=resetMask)
-
-        # This is just a regular register
-        if masterCnt == 1 and len(regnodelst) == 0:
-            return Register(name, bits, addr, size, **kwargs)
-
-        regs = []
-        if hasmaster:
-            # Grab the first array and use it as the template
-            templatereg, parent = regnodelst[0], parentlst[0]
-            (tname, tbits, taddr, tsize), tkwargs = cls._parse_register(templatereg, baseaddr,
-                                                                        parent=parent, size=size,
-                                                                        access=access,
-                                                                        protection=protection,
-                                                                        resetValue=resetValue,
-                                                                        resetMask=resetMask)
-            # Strip the suffix off the names
-            suffix      = get_suffix(tname)
-            tkwargs['displayName'] = get_basename(tkwargs['displayName'])
-            tname = prependToName + get_basename(tname) + appendToName
-            master = Register(tname, tbits, taddr, tsize, **tkwargs)
-        else:
-            # No template needed, just use the properties of the array itself
-            templatereg, parent = regnodelst[0], parentlst[0]
-            suffix = get_suffix(name)
-            kwargs['displayName'] = get_basename(kwargs['displayName'])
-            name = get_basename(name)
-            master = None
-
-        name = prependToName + name + appendToName
+        # Grab the first array and use it as the template
+        templatenode, parent = nodelst[0], parentlst[0]
+        suffix = get_suffix( _readtxt(templatenode, 'name', pop=False) )
+        templatenode['name'] = get_basename( _readtxt(templatenode, 'name', pop=False) )
+        templatenode['displayName'] = get_basename( _readtxt(templatenode, 'displayName', '', pop=False) )
 
         # dimIncrement has to be the same across a register array, so just take
         # it from the first one
-        dimInc = _readint(templatereg, 'dimIncrement', default=size, parent=parent, required=True)
+        dimInc = _readint(templatenode, 'dimIncrement',
+                          default=_readint(templatenode, 'size', pop=False), parent=parent, required=True)
 
         # Concatenate the index from all found register arrays
-        dimIndex = cls._parse_arrays(regnodelst)
+        dimIndex = cls._concat_arrays(nodelst)
 
-        template = Register(name, bits, addr, size, **kwargs)
+        templateblk = elemparser(templatenode, *args, parent=parent, **kwargs)
 
-        return RegisterArray(dimIndex, template, elementSize=dimInc, suffix=suffix, master=master)
+        return blktype(dimIndex, templateblk, elementSize=dimInc, suffix=suffix, master=master)
 
     @classmethod
-    def _parse_register(cls, regnode, baseaddr, parent={}, size=None,
+    def _concat_arrays(cls, nodelst):
+        dimIndex = []
+        for node in nodelst:
+            dimidx = _readtxt(node, 'dimIndex')
+            if dimidx is None:
+                dim = _readint(node, 'dim', required=True)
+                dimdx = range(dim)
+            elif ',' in dimidx:
+                dimidx = dimidx.split(',')
+                try:
+                    dimidx = map(int, dimidx)
+                except ValueError:
+                    pass
+            elif '-' in dimidx:
+                m=re.search('([0-9]+)-([0-9]+)', dimidx)
+                dimidx = range( int(m.group(1)), int(m.group(2))+1 )
+            dimIndex.extend(dimidx)
+        return dimIndex
+        
+    @classmethod
+    def parse_register(cls, regnode, baseaddr, parent={}, size=None,
                         access=None, protection=None, resetValue=None,
-                        resetMask=0):
+                        resetMask=0, appendToName='', prependToName=''):
         kwargs = {\
                   'description': _readtxt(regnode, 'description', required=True),
                   'access' : _readtxt(regnode, 'access', access, required=True),
@@ -346,33 +331,12 @@ class SVDParser(DeviceParser):
                 _readint(regnode, 'addressOffset', required=True) + baseaddr,
                 _readint(regnode, 'size', size, required=True),
                 ]
-        return args, kwargs
 
-    @classmethod
-    def _parse_arrays(cls, regnodelst):
-        dimIndex = []
-        for reg in regnodelst:
-            dimidx = _readtxt(reg, 'dimIndex')
-            if dimidx is None:
-                dim = _readint(reg, 'dim', required=True)
-                dimdx = range(dim)
-            elif ',' in dimidx:
-                dimidx = dimidx.split(',')
-                try:
-                    dimidx = map(int, dimidx)
-                except ValueError:
-                    pass
-            elif '-' in dimidx:
-                m=re.search('([0-9]+)-([0-9]+)', dimidx)
-                dimidx = range( int(m.group(1)), int(m.group(2))+1 )
-            dimIndex.extend(dimidx)
-        return dimIndex
-        
+        return components.Register(*args, **kwargs)
+
     @classmethod
     def parse_bitfield(cls, bitnode, parent={}, access=None):
         name = _readtxt(bitnode, 'name', parent=parent, required=True)
-        if name.lower() == 'reserved':
-            return None
 
         description = _readtxt(bitnode, 'description', '', parent=parent)
         bit_range=_readtxt(bitnode, 'bitRange', parent=parent)
@@ -400,7 +364,7 @@ class SVDParser(DeviceParser):
 
         enumvals = cls.parse_subblocks(enumvals, cls.parse_enumerated_value)
 
-        return BitField(name, bit_offset, bit_width, values=enumvals, access=access, description=description, kwattrs=bitnode)
+        return components.BitField(name, bit_offset, bit_width, values=enumvals, access=access, description=description, kwattrs=bitnode)
 
     @classmethod
     def parse_enumerated_value(cls, enumnode, parent={}):
@@ -412,4 +376,4 @@ class SVDParser(DeviceParser):
             return None
         
         value = _readint(enumnode, 'value', parent=parent, required=True)
-        return EnumeratedValue(name, value, description=description, kwattrs=enumnode)
+        return components.EnumeratedValue(name, value, description=description, kwattrs=enumnode)
